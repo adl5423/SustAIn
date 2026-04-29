@@ -6,6 +6,7 @@ export interface Message {
 }
 
 export type Mode = "performance" | "balanced" | "water_saver";
+export type UnitSystem = "metric" | "imperial";
 
 export interface Constraints {
   max_water_ml?: number;
@@ -22,11 +23,23 @@ export interface ChatOptions {
 
 export interface ResourceMetrics {
   energy_kwh: number;
+
   water_ml: number;
   baseline_water_ml: number;
+  water_saved_ml: number;
   water_saved_percent: number;
+
+  water_display: number;
+  baseline_display: number;
+  water_saved_display: number;
+  unit: string;
+
   tokens_estimated: number;
   cache_hit: boolean;
+
+  bottles_saved: number;
+  bottles_saved_session: number;
+  bottle_size_display: number;
 }
 
 export interface ChatResponse {
@@ -55,6 +68,8 @@ export interface ResourceAwareAIConfig {
   baselineFactor?: number;
   enableCache?: boolean;
   customEstimator?: EstimatorFn;
+  unitSystem?: UnitSystem;
+  bottleSizeMl?: number;
 }
 
 export interface ResourceLimitError {

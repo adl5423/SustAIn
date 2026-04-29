@@ -4,6 +4,7 @@ export type {
   Message,
   Role,
   Mode,
+  UnitSystem,
   Constraints,
   ChatOptions,
   ChatResponse,
@@ -40,4 +41,6 @@ export type { GenericProviderConfig } from "./providers/generic.js";
 export { listModels, getModelProfile } from "./core/models.js";
 export { estimateEnergy, estimateTokens, estimateTokensFromMessages } from "./core/estimator.js";
 export { calculateWater, computeWaterMetrics } from "./core/calculator.js";
-export { generateFootnote } from "./core/footnote.js";
+export { generateFootnote, generateInlineFootnote } from "./core/footnote.js";
+export { mlToDisplay, getUnit, mlToBottles, makeUnitContext } from "./core/units.js";
+export type { UnitContext } from "./core/units.js";

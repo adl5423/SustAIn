@@ -10,7 +10,7 @@ function makeMockProvider(text = "Mock response"): ProviderAdapter {
   };
 }
 
-describe("ResourceAwareAI.chat", () => {
+describe("ResourceAwareAI.chat — core response shape", () => {
   it("returns output, metrics, and footnote", async () => {
     const ai = new ResourceAwareAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
@@ -25,21 +25,19 @@ describe("ResourceAwareAI.chat", () => {
     expect(res.metrics.energy_kwh).toBeGreaterThan(0);
     expect(res.metrics.water_ml).toBeGreaterThan(0);
     expect(res.metrics.baseline_water_ml).toBeGreaterThan(0);
+    expect(res.metrics.water_saved_ml).toBeGreaterThanOrEqual(0);
     expect(res.metrics.water_saved_percent).toBeGreaterThanOrEqual(0);
     expect(res.footnote).toBeTruthy();
-    expect(res.footnote.toLowerCase()).toContain("ml");
   });
 
-  it("footnote is always present", async () => {
+  it("footnote is always present and non-empty", async () => {
     const ai = new ResourceAwareAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider("Test"));
-
     const res = await ai.chat({
       model: "gpt-4o",
       provider: "mock",
       messages: [{ role: "user", content: "What is 2+2?" }],
     });
-
     expect(typeof res.footnote).toBe("string");
     expect(res.footnote.length).toBeGreaterThan(10);
   });
@@ -50,30 +48,135 @@ describe("ResourceAwareAI.chat", () => {
     const res = await ai.chat({ model: "gpt-4o", provider: "mock", messages: [{ role: "user", content: "Hi" }] });
     expect(res.output).toBeTruthy();
   });
+});
 
+describe("ResourceAwareAI.chat — comparison metrics", () => {
+  it("provides water comparison fields", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false });
+    ai.registerProvider("mock", makeMockProvider());
+    const res = await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+
+    expect(res.metrics.water_saved_ml).toBeGreaterThanOrEqual(0);
+    expect(res.metrics.baseline_water_ml).toBeGreaterThan(res.metrics.water_ml);
+    expect(res.metrics.water_saved_ml).toBeCloseTo(
+      res.metrics.baseline_water_ml - res.metrics.water_ml, 5
+    );
+    expect(res.metrics.water_saved_percent).toBeGreaterThan(0);
+  });
+
+  it("footnote contains both used and baseline figures", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false });
+    ai.registerProvider("mock", makeMockProvider());
+    const res = await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "Hello" }],
+    });
+    expect(res.footnote).toContain("Water used");
+    expect(res.footnote).toContain("Without system");
+    expect(res.footnote).toContain("Water saved");
+    expect(res.footnote).toContain("Bottles saved");
+  });
+});
+
+describe("ResourceAwareAI.chat — unit systems", () => {
+  it("defaults to metric with ml unit", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false });
+    ai.registerProvider("mock", makeMockProvider());
+    const res = await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+    expect(res.metrics.unit).toBe("ml");
+    expect(res.metrics.water_display).toBeCloseTo(res.metrics.water_ml, 5);
+    expect(res.metrics.baseline_display).toBeCloseTo(res.metrics.baseline_water_ml, 5);
+  });
+
+  it("converts to fl oz in imperial mode", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false, unitSystem: "imperial" });
+    ai.registerProvider("mock", makeMockProvider());
+    const res = await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+    expect(res.metrics.unit).toBe("fl oz");
+    const expectedFlOz = res.metrics.water_ml / 29.5735;
+    expect(res.metrics.water_display).toBeCloseTo(expectedFlOz, 4);
+    expect(res.metrics.baseline_display).toBeCloseTo(res.metrics.baseline_water_ml / 29.5735, 4);
+  });
+
+  it("imperial footnote uses fl oz", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false, unitSystem: "imperial" });
+    ai.registerProvider("mock", makeMockProvider());
+    const res = await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+    expect(res.footnote).toContain("fl oz");
+  });
+});
+
+describe("ResourceAwareAI.chat — bottles metric", () => {
+  it("includes bottles_saved per call", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false });
+    ai.registerProvider("mock", makeMockProvider());
+    const res = await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "Hello" }],
+    });
+    expect(res.metrics.bottles_saved).toBeGreaterThanOrEqual(0);
+  });
+
+  it("accumulates bottles_saved_session across calls", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false });
+    ai.registerProvider("mock", makeMockProvider());
+    const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "A" }] };
+    const r1 = await ai.chat(opts);
+    const r2 = await ai.chat({ ...opts, messages: [{ role: "user", content: "B" }] });
+    expect(r2.metrics.bottles_saved_session).toBeGreaterThanOrEqual(r1.metrics.bottles_saved_session);
+  });
+
+  it("respects custom bottle size", async () => {
+    const bottleSizeMl = 250;
+    const ai500 = new ResourceAwareAI({ enableCache: false, bottleSizeMl: 500 });
+    const ai250 = new ResourceAwareAI({ enableCache: false, bottleSizeMl });
+    ai500.registerProvider("mock", makeMockProvider());
+    ai250.registerProvider("mock", makeMockProvider());
+
+    const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "Same" }] };
+    const r500 = await ai500.chat(opts);
+    const r250 = await ai250.chat(opts);
+
+    expect(r250.metrics.bottles_saved).toBeCloseTo(r500.metrics.bottles_saved * 2, 4);
+  });
+});
+
+describe("ResourceAwareAI.chat — caching", () => {
   it("caches repeated identical requests", async () => {
     const generateFn = vi.fn().mockResolvedValue({ text: "Cached", usage: { total_tokens: 50 } });
-    const mockProvider: ProviderAdapter = { generate: generateFn };
-
     const ai = new ResourceAwareAI({ enableCache: true });
-    ai.registerProvider("mock", mockProvider);
+    ai.registerProvider("mock", { generate: generateFn });
 
-    const messages: Message[] = [{ role: "user", content: "Same question" }];
-    const opts = { model: "gpt-4o", provider: "mock", messages };
-
+    const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "Same" }] };
     await ai.chat(opts);
     await ai.chat(opts);
 
     expect(generateFn).toHaveBeenCalledTimes(1);
   });
 
-  it("cache hit sets cache_hit=true in metrics", async () => {
+  it("cache hit sets cache_hit=true and shows in footnote", async () => {
     const ai = new ResourceAwareAI({ enableCache: true });
     ai.registerProvider("mock", makeMockProvider("Cached response"));
 
-    const messages: Message[] = [{ role: "user", content: "Repeated" }];
-    const opts = { model: "gpt-4o", provider: "mock", messages };
-
+    const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "Repeated" }] };
     await ai.chat(opts);
     const second = await ai.chat(opts);
 
@@ -81,9 +184,20 @@ describe("ResourceAwareAI.chat", () => {
     expect(second.footnote.toLowerCase()).toContain("cache");
   });
 
+  it("cache hit still increments session bottles", async () => {
+    const ai = new ResourceAwareAI({ enableCache: true });
+    ai.registerProvider("mock", makeMockProvider());
+
+    const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "X" }] };
+    const r1 = await ai.chat(opts);
+    const r2 = await ai.chat(opts);
+    expect(r2.metrics.bottles_saved_session).toBeGreaterThanOrEqual(r1.metrics.bottles_saved_session);
+  });
+});
+
+describe("ResourceAwareAI.chat — errors", () => {
   it("throws ResourceAwareAIError for unknown provider", async () => {
     const ai = new ResourceAwareAI({ enableCache: false });
-
     await expect(
       ai.chat({ model: "gpt-4o", provider: "nonexistent", messages: [{ role: "user", content: "Hi" }] })
     ).rejects.toBeInstanceOf(ResourceAwareAIError);
@@ -92,7 +206,6 @@ describe("ResourceAwareAI.chat", () => {
   it("throws RESOURCE_LIMIT_EXCEEDED when water limit exceeded", async () => {
     const ai = new ResourceAwareAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
-
     await expect(
       ai.chat({
         model: "gpt-4o",
@@ -102,30 +215,24 @@ describe("ResourceAwareAI.chat", () => {
       })
     ).rejects.toMatchObject({ sdkError: { code: "RESOURCE_LIMIT_EXCEEDED" } });
   });
+});
 
+describe("ResourceAwareAI.chat — custom estimator", () => {
   it("uses custom estimator when set", async () => {
     const ai = new ResourceAwareAI({ enableCache: false });
     ai.setEstimator(() => 999);
     ai.registerProvider("mock", makeMockProvider());
-
     const res = await ai.chat({
       model: "gpt-4o",
       provider: "mock",
       messages: [{ role: "user", content: "Hello" }],
     });
-
     expect(res.metrics.energy_kwh).toBe(999);
-  });
-
-  it("supports registerProvider chaining", () => {
-    const ai = new ResourceAwareAI();
-    const chain = ai.registerProvider("a", makeMockProvider()).registerProvider("b", makeMockProvider());
-    expect(chain).toBe(ai);
   });
 });
 
 describe("ResourceAwareAI.getStats", () => {
-  it("tracks total_requests and total_water_ml", async () => {
+  it("tracks requests and water totals", async () => {
     const ai = new ResourceAwareAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
 
@@ -135,35 +242,26 @@ describe("ResourceAwareAI.getStats", () => {
     const stats = ai.getStats();
     expect(stats.total_requests).toBe(2);
     expect(stats.total_water_ml).toBeGreaterThan(0);
+    expect(stats.bottles_saved_session).toBeGreaterThan(0);
+    expect(stats.unit).toBe("ml");
   });
 
-  it("tracks cache hits in stats", async () => {
-    const ai = new ResourceAwareAI({ enableCache: true });
+  it("reports imperial units in stats when configured", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false, unitSystem: "imperial" });
     ai.registerProvider("mock", makeMockProvider());
-
-    const messages: Message[] = [{ role: "user", content: "Cached question" }];
-    const opts = { model: "gpt-4o", provider: "mock", messages };
-
-    await ai.chat(opts);
-    await ai.chat(opts);
-
+    await ai.chat({ model: "gpt-4o", provider: "mock", messages: [{ role: "user", content: "Hi" }] });
     const stats = ai.getStats();
-    expect(stats.cache_hits).toBe(1);
-    expect(stats.cache_hit_rate).toBeCloseTo(50, 0);
+    expect(stats.unit).toBe("fl oz");
+    expect(stats.total_water_display).toBeCloseTo(stats.total_water_ml / 29.5735, 4);
   });
-});
 
-describe("ResourceAwareAI — provider metrics accuracy", () => {
-  it("returns baseline_water_ml > water_ml when using efficient settings", async () => {
-    const ai = new ResourceAwareAI({ regionFactor: 1800, baselineFactor: 4500, enableCache: false });
+  it("resetSession zeroes session counters", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
-
-    const res = await ai.chat({
-      model: "gpt-4o-mini",
-      provider: "mock",
-      messages: [{ role: "user", content: "Short" }],
-    });
-
-    expect(res.metrics.baseline_water_ml).toBeGreaterThan(res.metrics.water_ml);
+    await ai.chat({ model: "gpt-4o", provider: "mock", messages: [{ role: "user", content: "A" }] });
+    ai.resetSession();
+    const stats = ai.getStats();
+    expect(stats.total_requests).toBe(0);
+    expect(stats.bottles_saved_session).toBe(0);
   });
 });

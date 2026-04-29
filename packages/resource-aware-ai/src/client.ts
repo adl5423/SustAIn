@@ -11,6 +11,8 @@ import { estimateTokensFromMessages, estimateEnergy } from "./core/estimator.js"
 import { computeWaterMetrics } from "./core/calculator.js";
 import { generateFootnote } from "./core/footnote.js";
 import { ResponseCache } from "./core/cache.js";
+import { makeUnitContext, mlToDisplay, mlToBottles } from "./core/units.js";
+import type { UnitContext } from "./core/units.js";
 import { OpenAIProvider } from "./providers/openai.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
 import { GeminiProvider } from "./providers/gemini.js";
@@ -38,6 +40,8 @@ export class ResourceAwareAI {
   private readonly cache: ResponseCache | null;
   private customEstimator?: EstimatorFn;
   private readonly providers: Map<string, ProviderAdapter>;
+  private readonly unitCtx: UnitContext;
+  private sessionBottlesSaved = 0;
   private readonly observabilityStats = {
     total_requests: 0,
     cache_hits: 0,
@@ -52,6 +56,7 @@ export class ResourceAwareAI {
     this.cache = config.enableCache !== false ? new ResponseCache() : null;
     this.customEstimator = config.customEstimator;
     this.providers = new Map();
+    this.unitCtx = makeUnitContext(config.unitSystem ?? "metric", config.bottleSizeMl);
   }
 
   registerProvider(name: string, adapter: ProviderAdapter): this {
@@ -83,6 +88,42 @@ export class ResourceAwareAI {
         ...Array.from(this.providers.keys()),
       ],
     });
+  }
+
+  private buildMetrics(
+    raw: {
+      energy_kwh: number;
+      water_ml: number;
+      baseline_water_ml: number;
+      water_saved_percent: number;
+      tokens_estimated: number;
+      cache_hit: boolean;
+    }
+  ): ResourceMetrics {
+    const { energy_kwh, water_ml, baseline_water_ml, water_saved_percent, tokens_estimated, cache_hit } = raw;
+    const { system, unit, bottleSizeMl, bottleSizeDisplay } = this.unitCtx;
+
+    const water_saved_ml = Math.max(0, baseline_water_ml - water_ml);
+    const bottles_saved = mlToBottles(water_saved_ml, bottleSizeMl);
+
+    this.sessionBottlesSaved += bottles_saved;
+
+    return {
+      energy_kwh,
+      water_ml,
+      baseline_water_ml,
+      water_saved_ml,
+      water_saved_percent,
+      water_display: mlToDisplay(water_ml, system),
+      baseline_display: mlToDisplay(baseline_water_ml, system),
+      water_saved_display: mlToDisplay(water_saved_ml, system),
+      unit,
+      tokens_estimated,
+      cache_hit,
+      bottles_saved,
+      bottles_saved_session: this.sessionBottlesSaved,
+      bottle_size_display: bottleSizeDisplay,
+    };
   }
 
   async chat(options: ChatOptions): Promise<ChatResponse> {
@@ -120,26 +161,13 @@ export class ResourceAwareAI {
       if (this.cache.has(cacheKey)) {
         this.observabilityStats.cache_hits++;
         const cached = this.cache.get(cacheKey)!;
+        const cacheMetrics = this.buildMetrics({ ...cached.metrics, cache_hit: true });
         return {
           ...cached,
-          metrics: { ...cached.metrics, cache_hit: true },
-          footnote: generateFootnote({ ...cached.metrics, cache_hit: true }),
+          metrics: cacheMetrics,
+          footnote: generateFootnote(cacheMetrics),
         };
       }
-
-      const result = await this.executeChat(model, providerName, messages, mode, {
-        energy_kwh: kwh,
-        water_ml,
-        baseline_water_ml,
-        water_saved_percent,
-        tokens_estimated: tokens,
-        cache_hit: false,
-      });
-
-      this.cache.set(cacheKey, result);
-      this.observabilityStats.total_water_ml += water_ml;
-      this.observabilityStats.total_water_saved_ml += baseline_water_ml - water_ml;
-      return result;
     }
 
     const result = await this.executeChat(model, providerName, messages, mode, {
@@ -151,8 +179,13 @@ export class ResourceAwareAI {
       cache_hit: false,
     });
 
-    this.observabilityStats.total_water_ml += water_ml;
-    this.observabilityStats.total_water_saved_ml += baseline_water_ml - water_ml;
+    if (this.cache) {
+      this.cache.set(this.cache.hash(model, messages), result);
+    }
+
+    this.observabilityStats.total_water_ml += result.metrics.water_ml;
+    this.observabilityStats.total_water_saved_ml += result.metrics.water_saved_ml;
+
     return result;
   }
 
@@ -161,45 +194,44 @@ export class ResourceAwareAI {
     providerName: string,
     messages: ChatOptions["messages"],
     _mode: string,
-    metrics: Omit<ResourceMetrics, "cache_hit"> & { cache_hit: false }
-  ): Promise<ChatResponse> {
-    let adapter: ProviderAdapter;
-    try {
-      adapter = this.resolveProvider(providerName);
-    } catch (err) {
-      throw err;
+    rawMetrics: {
+      energy_kwh: number;
+      water_ml: number;
+      baseline_water_ml: number;
+      water_saved_percent: number;
+      tokens_estimated: number;
+      cache_hit: false;
     }
+  ): Promise<ChatResponse> {
+    const adapter = this.resolveProvider(providerName);
 
     try {
       const providerResponse = await adapter.generate({ model, messages });
 
-      let finalMetrics: ResourceMetrics = { ...metrics };
+      let finalRaw = rawMetrics;
 
       if (providerResponse.usage?.total_tokens) {
         const realTokens = providerResponse.usage.total_tokens;
-        const { computeWaterMetrics: cwm, calculateWater } = await import("./core/calculator.js");
         const { estimateEnergy: ee } = await import("./core/estimator.js");
+        const { computeWaterMetrics: cwm } = await import("./core/calculator.js");
         const realKwh = ee(realTokens, model, this.customEstimator);
-        const { water_ml, baseline_water_ml, water_saved_percent } = cwm(
-          realKwh,
-          this.regionFactor,
-          this.baselineFactor
-        );
-        void calculateWater;
-        finalMetrics = {
+        const refined = cwm(realKwh, this.regionFactor, this.baselineFactor);
+        finalRaw = {
           energy_kwh: realKwh,
-          water_ml,
-          baseline_water_ml,
-          water_saved_percent,
+          water_ml: refined.water_ml,
+          baseline_water_ml: refined.baseline_water_ml,
+          water_saved_percent: refined.water_saved_percent,
           tokens_estimated: realTokens,
           cache_hit: false,
         };
       }
 
+      const metrics = this.buildMetrics(finalRaw);
+
       return {
         output: providerResponse.text,
-        metrics: finalMetrics,
-        footnote: generateFootnote(finalMetrics),
+        metrics,
+        footnote: generateFootnote(metrics),
       };
     } catch (err) {
       if (err instanceof ResourceAwareAIError) throw err;
@@ -215,16 +247,35 @@ export class ResourceAwareAI {
   getStats() {
     const { total_requests, cache_hits, total_water_ml, total_water_saved_ml, provider_counts } =
       this.observabilityStats;
+    const { unit, bottleSizeMl, bottleSizeDisplay, system } = this.unitCtx;
     return {
       total_requests,
       cache_hits,
       cache_hit_rate: total_requests > 0 ? (cache_hits / total_requests) * 100 : 0,
       total_water_ml: parseFloat(total_water_ml.toFixed(4)),
       total_water_saved_ml: parseFloat(total_water_saved_ml.toFixed(4)),
-      avg_water_ml_per_request:
-        total_requests > 0 ? parseFloat((total_water_ml / total_requests).toFixed(4)) : 0,
+      total_water_display: parseFloat(mlToDisplay(total_water_ml, system).toFixed(6)),
+      total_water_saved_display: parseFloat(mlToDisplay(total_water_saved_ml, system).toFixed(6)),
+      unit,
+      avg_water_per_request: parseFloat(
+        mlToDisplay(total_requests > 0 ? total_water_ml / total_requests : 0, system).toFixed(6)
+      ),
+      bottles_saved_session: parseFloat(this.sessionBottlesSaved.toFixed(6)),
+      bottle_size_display: bottleSizeDisplay,
+      bottle_size_ml: bottleSizeMl,
       provider_distribution: { ...provider_counts },
     };
+  }
+
+  resetSession(): void {
+    this.sessionBottlesSaved = 0;
+    this.observabilityStats.total_requests = 0;
+    this.observabilityStats.cache_hits = 0;
+    this.observabilityStats.total_water_ml = 0;
+    this.observabilityStats.total_water_saved_ml = 0;
+    Object.keys(this.observabilityStats.provider_counts).forEach(
+      (k) => delete this.observabilityStats.provider_counts[k]
+    );
   }
 
   clearCache(): void {

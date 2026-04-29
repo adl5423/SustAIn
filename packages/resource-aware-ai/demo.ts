@@ -1,139 +1,177 @@
-import { ResourceAwareAI, listModels, getModelProfile, ResourceAwareAIError } from "./src/index.js";
-import type { Message, ProviderAdapter } from "./src/index.js";
+import { ResourceAwareAI, ResourceAwareAIError, generateInlineFootnote } from "./src/index.js";
+
+const mockProvider = {
+  async generate({ model, messages }: { model: string; messages: Array<{ content: string }> }) {
+    const last = messages.at(-1)?.content ?? "";
+    return {
+      text: `[${model}] Simulated response to: "${last}"`,
+      usage: { prompt_tokens: 20, completion_tokens: 55, total_tokens: 75 },
+    };
+  },
+};
 
 (async () => {
-  // ─── Demo 1: Basic usage with a mock provider (no API key needed) ────────────
-  console.log("=== Demo 1: Basic chat ===\n");
+  // ─── Demo 1: Full comparison footnote (metric) ────────────────────────────────
+  console.log("=== Demo 1: Full comparison footnote (metric) ===\n");
 
   const ai = new ResourceAwareAI({
-    regionFactor: 1800,    // ml water per kWh (hybrid-cooled data center)
-    baselineFactor: 4500,  // worst-case baseline
+    regionFactor: 1800,
+    baselineFactor: 4500,
     enableCache: true,
   });
-
-  ai.registerProvider("mock", {
-    async generate({ model, messages }) {
-      const last = messages.at(-1)?.content ?? "";
-      return {
-        text: `[${model}] Simulated response to: "${last}"`,
-        usage: { prompt_tokens: 12, completion_tokens: 28, total_tokens: 40 },
-      };
-    },
-  });
+  ai.registerProvider("mock", mockProvider);
 
   const res1 = await ai.chat({
     model: "gpt-4o",
     provider: "mock",
-    messages: [{ role: "user", content: "Explain AI in one sentence" }],
+    messages: [{ role: "user", content: "Explain climate change in 3 sentences" }],
   });
 
-  console.log("Output:  ", res1.output);
-  console.log("Footnote:", res1.footnote);
-  console.log("Metrics: ", res1.metrics);
+  console.log("Response:", res1.output);
+  console.log("\n--- Sustainability Report ---");
+  console.log(res1.footnote);
+  console.log("\nRaw metrics:", res1.metrics);
 
-  // ─── Demo 2: Comparing model classes (large vs medium vs small) ──────────────
-  console.log("\n=== Demo 2: Water usage by model size ===\n");
+  // ─── Demo 2: Imperial units ───────────────────────────────────────────────────
+  console.log("\n\n=== Demo 2: Imperial units (fl oz) ===\n");
+
+  const aiImperial = new ResourceAwareAI({
+    regionFactor: 1800,
+    baselineFactor: 4500,
+    enableCache: false,
+    unitSystem: "imperial",
+  });
+  aiImperial.registerProvider("mock", mockProvider);
+
+  const res2 = await aiImperial.chat({
+    model: "gpt-4o",
+    provider: "mock",
+    messages: [{ role: "user", content: "Explain climate change in 3 sentences" }],
+  });
+
+  console.log("--- Sustainability Report (Imperial) ---");
+  console.log(res2.footnote);
+
+  // ─── Demo 3: Inline single-line footnote ──────────────────────────────────────
+  console.log("\n\n=== Demo 3: Inline single-line footnote ===\n");
+  console.log("Inline:", generateInlineFootnote(res1.metrics));
+
+  // ─── Demo 4: Model comparison — water used vs baseline ───────────────────────
+  console.log("\n\n=== Demo 4: Model comparison — used vs baseline ===\n");
+
+  const aiComp = new ResourceAwareAI({ regionFactor: 1800, baselineFactor: 4500, enableCache: false });
+  aiComp.registerProvider("mock", mockProvider);
 
   const models = [
-    "gpt-4o",              // large
-    "gpt-4o-mini",         // medium
-    "gemini-2.0-flash-lite", // small
-    "claude-3-5-sonnet-20241022", // large
-    "mistral-small-latest",       // small
-    "command-r-plus",             // large
+    { id: "gpt-4o",                    label: "GPT-4o (large)" },
+    { id: "gpt-4o-mini",               label: "GPT-4o-mini (medium)" },
+    { id: "gemini-2.0-flash-lite",     label: "Gemini Flash Lite (small)" },
+    { id: "claude-3-5-sonnet-20241022",label: "Claude 3.5 Sonnet (large)" },
+    { id: "mistral-small-latest",      label: "Mistral Small (small)" },
   ];
 
-  for (const model of models) {
-    const res = await ai.chat({
-      model,
-      provider: "mock",
-      messages: [{ role: "user", content: "Hello" }],
-    });
-    const profile = getModelProfile(model);
+  console.log(
+    "  Model".padEnd(36) +
+    "Used (ml)".padStart(12) +
+    "Baseline (ml)".padStart(15) +
+    "Saved (ml)".padStart(12) +
+    "Saved %".padStart(10) +
+    "Bottles".padStart(10)
+  );
+  console.log("  " + "─".repeat(95));
+
+  for (const { id, label } of models) {
+    const r = await aiComp.chat({ model: id, provider: "mock", messages: [{ role: "user", content: "Hi" }] });
+    const m = r.metrics;
     console.log(
-      `  ${model.padEnd(34)} [${(profile?.class ?? "?").padEnd(6)}]  ` +
-      `${res.metrics.water_ml.toFixed(4).padStart(8)} ml water  |  ${res.metrics.water_saved_percent.toFixed(1)}% saved`
+      `  ${label.padEnd(34)}` +
+      `${m.water_display.toFixed(4).padStart(12)}` +
+      `${m.baseline_display.toFixed(4).padStart(15)}` +
+      `${m.water_saved_display.toFixed(4).padStart(12)}` +
+      `${m.water_saved_percent.toFixed(1).padStart(9)}%` +
+      `${m.bottles_saved.toFixed(5).padStart(10)}`
     );
   }
 
-  // ─── Demo 3: Caching — zero water for repeated queries ───────────────────────
-  console.log("\n=== Demo 3: Cache hit (0 ml water) ===\n");
+  // ─── Demo 5: Caching — zero water ─────────────────────────────────────────────
+  console.log("\n\n=== Demo 5: Cache hit — 0 ml water used ===\n");
 
-  const q = {
-    model: "gpt-4o",
-    provider: "mock",
-    messages: [{ role: "user" as const, content: "Same question every time" }],
-  };
-
+  const q = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "Same question" }] };
   const first = await ai.chat(q);
-  const second = await ai.chat(q);
+  const cached = await ai.chat(q);
 
-  console.log("First call  — cache_hit:", first.metrics.cache_hit, " | water:", first.metrics.water_ml.toFixed(4), "ml");
-  console.log("Second call — cache_hit:", second.metrics.cache_hit);
-  console.log("Footnote:   ", second.footnote);
+  console.log("First call  →", generateInlineFootnote(first.metrics));
+  console.log("Cached call →", generateInlineFootnote(cached.metrics));
 
-  // ─── Demo 4: Resource constraints ────────────────────────────────────────────
-  console.log("\n=== Demo 4: Resource constraint rejection ===\n");
+  // ─── Demo 6: Session accumulation ─────────────────────────────────────────────
+  console.log("\n\n=== Demo 6: Session water savings accumulation ===\n");
+
+  const aiSession = new ResourceAwareAI({ enableCache: false });
+  aiSession.registerProvider("mock", mockProvider);
+
+  const prompts = [
+    "Write a haiku about water",
+    "Summarize the water cycle",
+    "What is evaporation?",
+    "How much water does a tree absorb?",
+    "Explain ocean currents",
+  ];
+
+  for (const prompt of prompts) {
+    const r = await aiSession.chat({
+      model: "gpt-4o-mini",
+      provider: "mock",
+      messages: [{ role: "user", content: prompt }],
+    });
+    console.log(
+      `  "${prompt.slice(0, 35).padEnd(35)}"` +
+      `  used ${r.metrics.water_display.toFixed(4)} ml` +
+      `  │  session bottles saved so far: ${r.metrics.bottles_saved_session.toFixed(5)}`
+    );
+  }
+
+  console.log("\n  ─── Session Summary ───");
+  const stats = aiSession.getStats();
+  console.log(`  Total water used:    ${stats.total_water_display} ${stats.unit}`);
+  console.log(`  Total water saved:   ${stats.total_water_saved_display} ${stats.unit}`);
+  console.log(`  Bottles saved:       ${stats.bottles_saved_session.toFixed(5)} × ${stats.bottle_size_display.toFixed(0)} ml bottles`);
+  console.log(`  Total requests:      ${stats.total_requests}`);
+
+  // ─── Demo 7: Imperial session ─────────────────────────────────────────────────
+  console.log("\n\n=== Demo 7: Imperial session summary ===\n");
+
+  const aiImpSession = new ResourceAwareAI({ enableCache: false, unitSystem: "imperial" });
+  aiImpSession.registerProvider("mock", mockProvider);
+
+  for (const prompt of prompts.slice(0, 3)) {
+    await aiImpSession.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: prompt }],
+    });
+  }
+
+  const impStats = aiImpSession.getStats();
+  console.log(`  Unit system:         imperial`);
+  console.log(`  Total water used:    ${impStats.total_water_display.toFixed(6)} ${impStats.unit}`);
+  console.log(`  Total water saved:   ${impStats.total_water_saved_display.toFixed(6)} ${impStats.unit}`);
+  console.log(`  Bottles saved:       ${impStats.bottles_saved_session.toFixed(5)} × ${impStats.bottle_size_display.toFixed(2)} fl oz bottles`);
+
+  // ─── Demo 8: Constraint rejection ─────────────────────────────────────────────
+  console.log("\n\n=== Demo 8: Resource constraint rejection ===\n");
 
   try {
     await ai.chat({
       model: "gpt-4o",
       provider: "mock",
       messages: [{ role: "user", content: "A".repeat(5000) }],
-      constraints: { max_water_ml: 0.001 },  // absurdly tight limit
+      constraints: { max_water_ml: 0.001 },
     });
   } catch (err) {
     if (err instanceof ResourceAwareAIError) {
-      console.log("Caught error code:", err.sdkError.code);
-      console.log("Details:", err.sdkError);
+      console.log("Caught:", err.sdkError.code, "─", err.message);
     }
   }
-
-  // ─── Demo 5: Custom estimator ─────────────────────────────────────────────────
-  console.log("\n=== Demo 5: Custom estimator ===\n");
-
-  const aiCustom = new ResourceAwareAI({ enableCache: false });
-  aiCustom.registerProvider("mock", {
-    async generate({ model, messages }) {
-      return { text: "Custom estimator test", usage: { total_tokens: 100 } };
-    },
-  });
-  aiCustom.setEstimator((tokens, _model) => (tokens / 1000) * 0.0018);
-
-  const res5 = await aiCustom.chat({
-    model: "mistral-large-latest",
-    provider: "mock",
-    messages: [{ role: "user", content: "Test" }],
-  });
-  console.log("energy_kwh with custom estimator:", res5.metrics.energy_kwh);
-  console.log("Footnote:", res5.footnote);
-
-  // ─── Demo 6: Unknown provider error ──────────────────────────────────────────
-  console.log("\n=== Demo 6: Unknown provider error ===\n");
-
-  try {
-    await ai.chat({ model: "gpt-4o", provider: "xyz-unknown", messages: [{ role: "user", content: "Hi" }] });
-  } catch (err) {
-    if (err instanceof ResourceAwareAIError) {
-      console.log("Error code:", err.sdkError.code);
-      console.log("Message:", err.message);
-    }
-  }
-
-  // ─── Demo 7: Model registry ───────────────────────────────────────────────────
-  console.log("\n=== Demo 7: Model registry ===\n");
-
-  const profile = getModelProfile("claude-3-5-sonnet-20241022");
-  console.log("claude-3-5-sonnet-20241022 profile:", profile);
-
-  const allProviders = ["openai", "anthropic", "gemini", "mistral", "cohere", "ollama"];
-  for (const p of allProviders) {
-    console.log(`  ${p.padEnd(10)} → ${listModels(p).length} models registered`);
-  }
-
-  // ─── Demo 8: Observability stats ─────────────────────────────────────────────
-  console.log("\n=== Demo 8: Observability stats ===\n");
-  console.log(ai.getStats());
 
   console.log("\nAll demos complete.");
 })();
