@@ -1,22 +1,61 @@
 import { ResourceAwareAI } from "./src/index.js";
 
+const USAGE = `
+Usage:
+  pnpm --filter resource-aware-ai run test:openai -- [model] [provider] "your prompt"
+
+Examples:
+  pnpm --filter resource-aware-ai run test:openai -- gpt-4o-mini openai "What is the water cycle?"
+  pnpm --filter resource-aware-ai run test:openai -- claude-3-5-haiku-20241022 anthropic "Explain black holes"
+  pnpm --filter resource-aware-ai run test:openai -- gemini-2.0-flash gemini "Write a haiku about rain"
+
+Defaults (if no args given):
+  model:    gpt-4o-mini
+  provider: openai
+  prompt:   "What is the water cycle? One sentence."
+`.trim();
+
+const [, , argModel, argProvider, ...rest] = process.argv;
+const prompt = rest.join(" ");
+
+const model    = argModel    || "gpt-4o-mini";
+const provider = argProvider || "openai";
+const message  = prompt      || "What is the water cycle? One sentence.";
+
+if (argModel === "--help" || argModel === "-h") {
+  console.log(USAGE);
+  process.exit(0);
+}
+
+const KEY_MAP: Record<string, string> = {
+  openai:    "OPENAI_API_KEY",
+  anthropic: "ANTHROPIC_API_KEY",
+  gemini:    "GEMINI_API_KEY",
+  mistral:   "MISTRAL_API_KEY",
+  cohere:    "COHERE_API_KEY",
+};
+
+const requiredKey = KEY_MAP[provider.toLowerCase()];
+if (requiredKey && !process.env[requiredKey]) {
+  console.error(`Missing ${requiredKey} — add it to Replit Secrets.`);
+  process.exit(1);
+}
+
 (async () => {
-  if (!process.env["OPENAI_API_KEY"]) {
-    console.error("Missing OPENAI_API_KEY — add it to Replit Secrets.");
-    process.exit(1);
-  }
+  console.log(`Model:    ${model}`);
+  console.log(`Provider: ${provider}`);
+  console.log(`Prompt:   "${message}"\n`);
 
   const ai = new ResourceAwareAI();
 
-  console.log("Sending request to OpenAI...\n");
-
   const res = await ai.chat({
-    model: "gpt-4o-mini",
-    provider: "openai",
-    messages: [{ role: "user", content: "What is the water cycle? One sentence." }],
+    model,
+    provider,
+    messages: [{ role: "user", content: message }],
   });
 
-  console.log("Response:", res.output);
-  console.log("\n--- Sustainability Report ---");
+  console.log("─── Response ───────────────────────────────────────");
+  console.log(res.output);
+  console.log("\n─── Sustainability Report ──────────────────────────");
   console.log(res.footnote);
 })();
