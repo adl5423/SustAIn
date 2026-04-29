@@ -15,7 +15,7 @@ Defaults (if no args given):
   prompt:   "What is the water cycle? One sentence."
 `.trim();
 
-const [, , argModel, argProvider, ...rest] = process.argv;
+const [argModel, argProvider, ...rest] = process.argv.slice(2).filter((a) => a !== "--");
 const prompt = rest.join(" ");
 
 const model    = argModel    || "gpt-4o-mini";
