@@ -36,6 +36,7 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
+    "demo": "tsx demo.ts",
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
@@ -55,6 +56,7 @@
   "devDependencies": {
     "typescript": "~5.9.2",
     "vitest": "^3.1.2",
+    "tsx": "catalog:",
     "openai": "^4.93.0",
     "@anthropic-ai/sdk": "^0.40.0",
     "@google/generative-ai": "^0.24.0",
