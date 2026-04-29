@@ -65,9 +65,9 @@ describe("generateFootnote", () => {
     expect(fn).toContain("fl oz");
   });
 
-  it("shows session total bottles in cache hit footnote when > 0", () => {
+  it("shows session sentence in cache hit footnote", () => {
     const fn = generateFootnote({ ...baseMetrics, cache_hit: true, bottles_saved_session: 0.5 });
-    expect(fn).toContain("Session bottles saved");
+    expect(fn).toContain("You've saved");
   });
 });
 

@@ -26,18 +26,23 @@ export function generateFootnote(metrics: ResourceMetrics): string {
   const bottleLabel = `${fmtN(bottle_size_display)} ${bottleUnit} bottle`;
 
   if (cache_hit) {
-    const sessionLine =
-      bottles_saved_session > 0
-        ? ` Session bottles saved: ${fmtN(bottles_saved_session)} (${bottleLabel}s).`
-        : "";
+    const sessionSentence =
+      bottles_saved_session >= 1
+        ? `You've saved the equivalent of ${fmtN(bottles_saved_session)} ${bottleLabel}s of water in this conversation so far.`
+        : `You've saved ${fmtN(bottles_saved_session)} of a ${bottleLabel} of water in this conversation so far.`;
     return (
-      `Served from cache — 0 ${unit} used (vs baseline ${fmtN(baseline_display)} ${unit}).` +
-      sessionLine
+      `Served from cache — 0 ${unit} used (vs baseline ${fmtN(baseline_display)} ${unit}).\n\n` +
+      sessionSentence
     );
   }
 
   const saved_sign = water_saved_percent >= 0 ? "−" : "+";
   const saved_abs = Math.abs(water_saved_percent).toFixed(1);
+
+  const sessionSentence =
+    bottles_saved_session >= 1
+      ? `You've saved the equivalent of ${fmtN(bottles_saved_session)} ${bottleLabel}s of water in this conversation so far.`
+      : `You've saved ${fmtN(bottles_saved_session)} of a ${bottleLabel} of water in this conversation so far.`;
 
   const lines = [
     `Water used:      ${fmtN(water_display)} ${unit}`,
@@ -45,6 +50,8 @@ export function generateFootnote(metrics: ResourceMetrics): string {
     `Water saved:     ${fmtN(water_saved_display)} ${unit}  (${saved_sign}${saved_abs}%)`,
     `Energy:          ${(energy_kwh * 1000).toFixed(4)} Wh`,
     `Bottles saved:   ${fmtN(bottles_saved)} × ${bottleLabel}  |  session total: ${fmtN(bottles_saved_session)}`,
+    ``,
+    sessionSentence,
   ];
 
   return lines.join("\n");
