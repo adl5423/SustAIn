@@ -37,6 +37,7 @@
     "test:watch": "vitest",
     "typecheck": "tsc --noEmit",
     "demo": "tsx demo.ts",
+    "test:openai": "tsx test-openai.ts",
     "prepublishOnly": "pnpm run build"
   },
   "peerDependencies": {
