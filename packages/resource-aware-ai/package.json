@@ -1,0 +1,64 @@
+{
+  "name": "resource-aware-ai",
+  "version": "1.0.0",
+  "description": "A provider-agnostic SDK that wraps any LLM call and returns energy + water usage metrics with a human-readable sustainability footnote.",
+  "keywords": [
+    "ai",
+    "llm",
+    "sustainability",
+    "water",
+    "energy",
+    "openai",
+    "anthropic",
+    "gemini",
+    "mistral",
+    "cohere",
+    "resource-aware"
+  ],
+  "author": "",
+  "license": "MIT",
+  "main": "./dist/cjs/index.js",
+  "module": "./dist/esm/index.js",
+  "types": "./dist/types/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/types/index.d.ts",
+      "import": "./dist/esm/index.js",
+      "require": "./dist/cjs/index.js"
+    }
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "scripts": {
+    "build": "tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && tsc -p tsconfig.types.json",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit",
+    "prepublishOnly": "pnpm run build"
+  },
+  "peerDependencies": {
+    "openai": ">=4.0.0",
+    "@anthropic-ai/sdk": ">=0.20.0",
+    "@google/generative-ai": ">=0.1.0",
+    "@mistralai/mistralai": ">=0.1.0",
+    "cohere-ai": ">=7.0.0"
+  },
+  "peerDependenciesMeta": {
+    "openai": { "optional": true },
+    "@anthropic-ai/sdk": { "optional": true },
+    "@google/generative-ai": { "optional": true },
+    "@mistralai/mistralai": { "optional": true },
+    "cohere-ai": { "optional": true }
+  },
+  "devDependencies": {
+    "typescript": "~5.9.2",
+    "vitest": "^3.1.2",
+    "openai": "^4.93.0",
+    "@anthropic-ai/sdk": "^0.40.0",
+    "@google/generative-ai": "^0.24.0",
+    "@mistralai/mistralai": "^1.5.0",
+    "cohere-ai": "^7.15.0"
+  }
+}

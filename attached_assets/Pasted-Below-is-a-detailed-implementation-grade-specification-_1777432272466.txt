@@ -1,0 +1,476 @@
+Below is a **detailed, implementation-grade specification sheet** for a **provider-agnostic Resource-Aware AI SDK** (NPM + PyPI). It is written as a product + engineering spec that can be handed directly to a team to build and publish.
+
+---
+
+# 1) Product Definition
+
+### Name
+
+* `resource-aware-ai` (NPM)
+* `resource_aware_ai` (PyPI)
+
+### Category
+
+Infrastructure SDK / Middleware
+
+### Purpose
+
+Convert any LLM API call into a **resource-aware execution** that:
+
+* estimates energy usage (kWh)
+* estimates water usage (ml)
+* optionally optimizes execution
+* returns **metrics + human-readable sustainability footnote**
+
+---
+
+# 2) Functional Requirements
+
+## 2.1 Core Capabilities
+
+| Capability           | Description                                                        |
+| -------------------- | ------------------------------------------------------------------ |
+| Provider abstraction | Works with OpenAI, Anthropic, Gemini, local models, or custom APIs |
+| Resource estimation  | Estimates kWh and water usage per request                          |
+| Baseline comparison  | Computes savings vs worst-case baseline                            |
+| Footnote generation  | Human-readable sustainability output                               |
+| Mode selection       | performance / balanced / water_saver                               |
+| Extensibility        | Custom providers + custom estimation models                        |
+
+---
+
+## 2.2 Non-Goals (Explicit)
+
+* No direct hardware telemetry dependency (optional later)
+* No requirement for proprietary infrastructure
+* No enforced routing (SDK only, not orchestrator)
+
+---
+
+# 3) System Architecture
+
+## 3.1 High-Level Flow
+
+```text
+Client App
+   ↓
+ResourceAwareAI SDK
+   ├── Token Estimator
+   ├── Energy Model
+   ├── Water Model
+   ├── Provider Adapter
+   └── Footnote Generator
+   ↓
+LLM Provider
+   ↓
+Response + Metrics
+```
+
+---
+
+## 3.2 Internal Modules
+
+| Module              | Responsibility            |
+| ------------------- | ------------------------- |
+| client              | Public interface          |
+| estimator           | Token + energy estimation |
+| calculator          | Water + baseline math     |
+| providers           | LLM integrations          |
+| footnote            | Output formatting         |
+| cache (optional)    | Deduplication             |
+| policies (optional) | Constraint enforcement    |
+
+---
+
+# 4) Public API Specification
+
+## 4.1 Core Method
+
+### Node + Python (Unified Concept)
+
+```ts
+chat({
+  model: string,
+  provider: string,
+  messages: Message[],
+  mode?: "performance" | "balanced" | "water_saver",
+  constraints?: {
+    max_water_ml?: number,
+    max_kwh?: number
+  }
+}) → Response
+```
+
+---
+
+## 4.2 Message Schema
+
+```json
+{
+  "role": "user | system | assistant",
+  "content": "string"
+}
+```
+
+---
+
+## 4.3 Response Schema
+
+```json
+{
+  "output": "string",
+  "metrics": {
+    "energy_kwh": number,
+    "water_ml": number,
+    "baseline_water_ml": number,
+    "water_saved_percent": number
+  },
+  "footnote": "string"
+}
+```
+
+---
+
+# 5) Core Algorithms
+
+## 5.1 Token Estimation
+
+### Default Heuristic
+
+```text
+tokens ≈ characters / 4
+```
+
+---
+
+## 5.2 Energy Model
+
+```text
+kWh = (tokens / 1000) × model_factor
+```
+
+### Model Factors
+
+| Model Class                | Factor (kWh / 1k tokens) |
+| -------------------------- | ------------------------ |
+| small (≤7B)                | 0.0004                   |
+| medium (8B–30B)            | 0.0012                   |
+| large (≥70B / GPT-4 class) | 0.0025                   |
+
+---
+
+## 5.3 Water Model
+
+```text
+water_ml = kWh × region_factor
+```
+
+### Region Factor
+
+| Cooling Type | ml per kWh |
+| ------------ | ---------- |
+| Air cooled   | 0–500      |
+| Hybrid       | 500–2000   |
+| Evaporative  | 2000–5000  |
+
+---
+
+## 5.4 Baseline Model
+
+```text
+baseline = large_model × worst_region_factor
+```
+
+---
+
+## 5.5 Savings Calculation
+
+```text
+water_saved_percent =
+  (baseline - actual) / baseline × 100
+```
+
+---
+
+# 6) Modes Behavior
+
+| Mode        | Behavior                              |
+| ----------- | ------------------------------------- |
+| performance | no optimization                       |
+| balanced    | moderate model efficiency             |
+| water_saver | reduce model size, encourage batching |
+
+---
+
+# 7) Provider Abstraction Layer
+
+## 7.1 Interface Contract
+
+### Node
+
+```javascript
+generate({ model, messages }) → {
+  text: string,
+  usage?: object
+}
+```
+
+### Python
+
+```python
+generate(model, messages) → {
+  "text": str,
+  "usage": dict
+}
+```
+
+---
+
+## 7.2 Required Providers
+
+| Provider     | Required |
+| ------------ | -------- |
+| OpenAI       | Yes      |
+| Anthropic    | Yes      |
+| Generic HTTP | Yes      |
+| Local        | Optional |
+
+---
+
+# 8) Configuration Specification
+
+## 8.1 Constructor Config
+
+```json
+{
+  "regionFactor": 1800,
+  "baselineFactor": 4500,
+  "enableCache": true,
+  "customEstimator": null
+}
+```
+
+---
+
+## 8.2 Environment Variables
+
+```bash
+OPENAI_API_KEY=
+ANTHROPIC_API_KEY=
+RESOURCE_AI_REGION_FACTOR=
+```
+
+---
+
+# 9) Caching Layer (Optional but Critical)
+
+## 9.1 Behavior
+
+* Hash input messages
+* Return cached result if identical
+
+## 9.2 Impact
+
+* eliminates recomputation
+* reduces water usage to ~0 for repeated queries
+
+---
+
+# 10) Error Handling
+
+## 10.1 Standard Errors
+
+```json
+{
+  "error": {
+    "code": "PROVIDER_ERROR",
+    "message": "Failed to reach provider"
+  }
+}
+```
+
+---
+
+## 10.2 Constraint Violations
+
+```json
+{
+  "error": {
+    "code": "RESOURCE_LIMIT_EXCEEDED",
+    "details": {
+      "water_ml": 75,
+      "limit": 50
+    }
+  }
+}
+```
+
+---
+
+# 11) Performance Targets
+
+| Metric            | Target     |
+| ----------------- | ---------- |
+| Overhead latency  | < 5 ms     |
+| Memory footprint  | < 10 MB    |
+| Throughput impact | negligible |
+
+---
+
+# 12) Security Considerations
+
+* No storage of prompts unless caching enabled
+* API keys never logged
+* Providers isolated per adapter
+
+---
+
+# 13) Extensibility
+
+## 13.1 Custom Provider
+
+```javascript
+ai.registerProvider("custom", customAdapter)
+```
+
+---
+
+## 13.2 Custom Estimator
+
+```javascript
+ai.setEstimator((tokens, model) => {
+  return custom_kwh
+});
+```
+
+---
+
+# 14) Packaging Specification
+
+## 14.1 NPM
+
+```json
+{
+  "name": "resource-aware-ai",
+  "version": "1.0.0",
+  "main": "index.js",
+  "types": "index.d.ts"
+}
+```
+
+---
+
+## 14.2 PyPI
+
+```toml
+[project]
+name = "resource_aware_ai"
+version = "1.0.0"
+dependencies = ["requests"]
+```
+
+---
+
+# 15) Observability (Optional but Recommended)
+
+## Metrics to Track
+
+* avg_water_ml_per_request
+* total_water_saved
+* cache_hit_rate
+* model_distribution
+
+---
+
+# 16) Testing Strategy
+
+## Unit Tests
+
+* estimator accuracy
+* water calculation
+* provider adapters
+
+## Integration Tests
+
+* real API calls (mocked + live)
+
+---
+
+# 17) Limitations
+
+* Estimates are approximations unless real telemetry is available
+* Region factor must be manually configured or approximated
+* Different providers expose different usage data
+
+---
+
+# 18) Future Extensions
+
+* real GPU telemetry integration
+* dynamic routing across regions
+* carbon + water unified model
+* streaming estimation
+* enterprise dashboards
+
+---
+
+# 19) Acceptance Criteria
+
+System is complete when:
+
+* Works with ≥3 providers
+* Returns consistent metrics
+* Footnote appears in every response
+* SDK usable in <5 lines of code
+* Overhead negligible
+
+---
+
+# 20) Minimal Usage Example (Final Validation)
+
+### Node
+
+```javascript
+const AI = require("resource-aware-ai");
+
+const ai = new AI();
+
+const res = await ai.chat({
+  model: "gpt-4o",
+  provider: "openai",
+  messages: [{ role: "user", content: "Explain AI" }]
+});
+
+console.log(res.output);
+console.log(res.footnote);
+```
+
+---
+
+### Python
+
+```python
+from resource_aware_ai import ResourceAwareAI
+
+ai = ResourceAwareAI()
+
+res = ai.chat(
+    model="gpt-4o",
+    provider="openai",
+    messages=[{"role": "user", "content": "Explain AI"}]
+)
+
+print(res["output"])
+print(res["footnote"])
+```
+
+---
+
+If needed, the next step is converting this into:
+
+* full OpenAPI 3.1 spec
+* publish-ready repos (NPM + PyPI)
+* TypeScript typings + CLI tool
+* FastAPI / Express middleware
+
+Specify the target and it can be produced fully.
