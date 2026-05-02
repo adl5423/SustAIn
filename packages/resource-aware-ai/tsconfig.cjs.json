@@ -3,9 +3,11 @@
   "compilerOptions": {
     "rootDir": "src",
     "outDir": "dist/cjs",
-    "module": "CommonJS",
-    "moduleResolution": "Node",
-    "declaration": false
+    "module": "NodeNext",
+    "moduleResolution": "NodeNext",
+    "declaration": false,
+    "types": ["node"],
+    "skipLibCheck": true
   },
   "include": ["src"]
 }

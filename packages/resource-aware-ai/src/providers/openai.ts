@@ -19,18 +19,27 @@ export class OpenAIProvider extends BaseProvider {
     const apiKey = this.config.apiKey ?? process.env["OPENAI_API_KEY"];
     if (!apiKey) throw new Error("OpenAI API key required. Set OPENAI_API_KEY or pass apiKey in config.");
 
-    let OpenAI: typeof import("openai").default;
+    let mod: { default: new (opts: Record<string, unknown>) => unknown };
     try {
-      ({ default: OpenAI } = await import("openai"));
+      mod = (await import("openai")) as unknown as typeof mod;
     } catch {
-      throw new Error('OpenAI SDK not installed. Run: npm install openai');
+      throw new Error("OpenAI SDK not installed. Run: npm install openai");
     }
 
-    const client = new OpenAI({
+    const client = new mod.default({
       apiKey,
       baseURL: this.config.baseURL,
       organization: this.config.organization,
-    });
+    }) as {
+      chat: {
+        completions: {
+          create: (args: { model: string; messages: Message[] }) => Promise<{
+            choices: Array<{ message: { content: string | null } }>;
+            usage?: { prompt_tokens?: number; completion_tokens?: number; total_tokens?: number };
+          }>;
+        };
+      };
+    };
 
     const res = await client.chat.completions.create({ model, messages });
     const choice = res.choices[0];
