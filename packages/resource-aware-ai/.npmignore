@@ -1,0 +1,12 @@
+src/
+tests/
+demo.ts
+test-openai.ts
+tsconfig.json
+tsconfig.cjs.json
+tsconfig.esm.json
+tsconfig.types.json
+vitest.config.ts
+node_modules/
+*.tsbuildinfo
+.DS_Store

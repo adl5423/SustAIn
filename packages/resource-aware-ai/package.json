@@ -1,22 +1,40 @@
 {
   "name": "resource-aware-ai",
   "version": "1.0.0",
-  "description": "A provider-agnostic SDK that wraps any LLM call and returns energy + water usage metrics with a human-readable sustainability footnote.",
+  "description": "Provider-agnostic TypeScript SDK that wraps any LLM call (OpenAI, Anthropic, Gemini, Mistral, Cohere, Ollama, custom HTTP) and returns energy + water usage metrics with a human-readable sustainability footnote.",
   "keywords": [
     "ai",
     "llm",
     "sustainability",
     "water",
     "energy",
+    "carbon",
+    "green-ai",
+    "esg",
     "openai",
     "anthropic",
     "gemini",
     "mistral",
     "cohere",
-    "resource-aware"
+    "ollama",
+    "resource-aware",
+    "metrics",
+    "observability"
   ],
-  "author": "",
+  "author": "resource-aware-ai contributors",
   "license": "MIT",
+  "homepage": "https://github.com/resource-aware-ai/resource-aware-ai#readme",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/resource-aware-ai/resource-aware-ai.git"
+  },
+  "bugs": {
+    "url": "https://github.com/resource-aware-ai/resource-aware-ai/issues"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "sideEffects": false,
   "main": "./dist/cjs/index.js",
   "module": "./dist/esm/index.js",
   "types": "./dist/types/index.d.ts",
@@ -25,11 +43,13 @@
       "types": "./dist/types/index.d.ts",
       "import": "./dist/esm/index.js",
       "require": "./dist/cjs/index.js"
-    }
+    },
+    "./package.json": "./package.json"
   },
   "files": [
     "dist",
-    "README.md"
+    "README.md",
+    "LICENSE"
   ],
   "scripts": {
     "build": "tsc -p tsconfig.esm.json && tsc -p tsconfig.cjs.json && tsc -p tsconfig.types.json",
@@ -38,7 +58,7 @@
     "typecheck": "tsc --noEmit",
     "demo": "tsx demo.ts",
     "test:openai": "tsx test-openai.ts",
-    "prepublishOnly": "pnpm run build"
+    "prepublishOnly": "pnpm run typecheck && pnpm run test && pnpm run build"
   },
   "peerDependencies": {
     "openai": ">=4.0.0",
@@ -63,5 +83,8 @@
     "@google/generative-ai": "^0.24.0",
     "@mistralai/mistralai": "^1.5.0",
     "cohere-ai": "^7.15.0"
+  },
+  "publishConfig": {
+    "access": "public"
   }
 }
