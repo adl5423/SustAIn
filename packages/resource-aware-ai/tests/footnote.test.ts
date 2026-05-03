@@ -13,7 +13,7 @@ const session: SessionSummary = {
   water_saved_ml: 12.5,
   co2_saved_g: 2.095,
   bottles_saved: 0.025,
-  cache_savings: { requests: 0, energy_wh: 0, water_ml: 0, co2_g: 0 },
+  cache_savings: { requests: 0, exact_hits: 0, semantic_hits: 0, energy_wh: 0, water_ml: 0, co2_g: 0 },
   equivalents_used: { ...ZERO_EQUIVALENTS, google_searches: 16.67 },
   equivalents_saved: { ...ZERO_EQUIVALENTS },
 };
@@ -31,6 +31,8 @@ const baseMetrics: ResourceMetrics = {
   unit: "ml",
   tokens_estimated: 2000,
   cache_hit: false,
+  cache_hit_type: null,
+  cache_similarity: null,
   bottles_saved: 0.025,
   bottles_saved_session: 0.1,
   bottle_size_display: 500,
@@ -123,7 +125,7 @@ describe("generateFootnote", () => {
       ...baseMetrics,
       session: {
         ...session,
-        cache_savings: { requests: 3, energy_wh: 15, water_ml: 30, co2_g: 7.2 },
+        cache_savings: { requests: 3, exact_hits: 3, semantic_hits: 0, energy_wh: 15, water_ml: 30, co2_g: 7.2 },
       },
     };
     const fn = generateFootnote(withCacheSavings);

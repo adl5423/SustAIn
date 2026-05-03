@@ -2,9 +2,11 @@ import type {
   ChatOptions,
   ChatResponse,
   EstimatorFn,
+  EmbedderFn,
   ProviderAdapter,
   ResourceAwareAIConfig,
   ResourceMetrics,
+  RoutedChatOptions,
   SessionSummary,
   CacheSavingsTotals,
 } from "./types.js";
@@ -14,6 +16,7 @@ import { computeWaterMetrics, calculateSavings } from "./core/calculator.js";
 import { computeCarbonMetrics } from "./core/carbon.js";
 import { generateFootnote } from "./core/footnote.js";
 import { ResponseCache } from "./core/cache.js";
+import { SemanticCache, canonicalizeMessages } from "./core/semantic-cache.js";
 import { makeUnitContext, mlToDisplay, mlToBottles } from "./core/units.js";
 import type { UnitContext } from "./core/units.js";
 import {
@@ -23,6 +26,16 @@ import {
 } from "./core/regions.js";
 import { computeEquivalents, ZERO_EQUIVALENTS } from "./core/equivalents.js";
 import type { Equivalents } from "./core/equivalents.js";
+import {
+  DEFAULT_CONFIDENCE_THRESHOLD,
+  defaultConfidenceFn,
+} from "./core/router.js";
+import type {
+  ConfidenceFn,
+  RouterMetrics,
+  RouterSessionTotals,
+  RouterTier,
+} from "./core/router.js";
 import { OpenAIProvider } from "./providers/openai.js";
 import { AnthropicProvider } from "./providers/anthropic.js";
 import { GeminiProvider } from "./providers/gemini.js";
@@ -32,6 +45,8 @@ import { OllamaProvider } from "./providers/ollama.js";
 
 const DEFAULT_REGION_FACTOR = 2000;
 const DEFAULT_BASELINE_FACTOR = 4500;
+const DEFAULT_SEMANTIC_THRESHOLD = 0.95;
+const DEFAULT_SEMANTIC_MAX_SIZE = 1000;
 
 type BuiltinProviderName = "openai" | "anthropic" | "gemini" | "mistral" | "cohere" | "ollama";
 
@@ -52,6 +67,8 @@ interface RawMetricsInput {
   baseline_co2_g: number;
   tokens_estimated: number;
   cache_hit: boolean;
+  cache_hit_type?: "exact" | "semantic" | null;
+  cache_similarity?: number | null;
 }
 
 export class ResourceAwareAI {
@@ -66,6 +83,11 @@ export class ResourceAwareAI {
   private readonly gridIntensityG: number;
   private readonly baselineGridIntensityG: number;
 
+  // ── Semantic cache ────────────────────────────────────────────────────────
+  private readonly semanticCache: SemanticCache | null;
+  private readonly semanticCacheThreshold: number;
+  private embedder?: EmbedderFn;
+
   // ── Session state (full-precision floats, only rounded at display) ─────────
   private sessionRequests = 0;
   private sessionCacheHits = 0;
@@ -77,10 +99,13 @@ export class ResourceAwareAI {
   private sessionBottlesSaved = 0;
   private readonly cacheSavings: CacheSavingsTotals = {
     requests: 0,
+    exact_hits: 0,
+    semantic_hits: 0,
     energy_wh: 0,
     water_ml: 0,
     co2_g: 0,
   };
+  private routerSession: RouterSessionTotals | null = null;
   private readonly providerCounts: Record<string, number> = {};
 
   constructor(config: ResourceAwareAIConfig = {}) {
@@ -94,6 +119,12 @@ export class ResourceAwareAI {
     this.region = config.region ?? DEFAULT_REGION;
     this.gridIntensityG = config.gridIntensityG ?? getGridIntensity(this.region);
     this.baselineGridIntensityG = config.baselineGridIntensityG ?? BASELINE_GRID_G_PER_KWH;
+
+    this.semanticCacheThreshold = config.semanticCacheThreshold ?? DEFAULT_SEMANTIC_THRESHOLD;
+    this.embedder = config.embedder;
+    this.semanticCache = config.enableSemanticCache
+      ? new SemanticCache(config.semanticCacheMaxSize ?? DEFAULT_SEMANTIC_MAX_SIZE)
+      : null;
   }
 
   registerProvider(name: string, adapter: ProviderAdapter): this {
@@ -103,6 +134,11 @@ export class ResourceAwareAI {
 
   setEstimator(fn: EstimatorFn): this {
     this.customEstimator = fn;
+    return this;
+  }
+
+  setEmbedder(fn: EmbedderFn): this {
+    this.embedder = fn;
     return this;
   }
 
@@ -133,12 +169,12 @@ export class ResourceAwareAI {
       co2_g: this.sessionCo2G,
     });
     const equivalents_saved: Equivalents = computeEquivalents({
-      energy_wh: this.cacheSavings.energy_wh, // direct energy avoided via cache
+      energy_wh: this.cacheSavings.energy_wh,
       water_ml: this.sessionWaterSavedMl,
       co2_g: this.sessionCo2SavedG,
     });
 
-    return {
+    const summary: SessionSummary = {
       requests: this.sessionRequests,
       cache_hits: this.sessionCacheHits,
       cache_hit_rate,
@@ -152,6 +188,13 @@ export class ResourceAwareAI {
       equivalents_used,
       equivalents_saved,
     };
+    if (this.routerSession) {
+      summary.router = {
+        ...this.routerSession,
+        tier_usage: [...this.routerSession.tier_usage],
+      };
+    }
+    return summary;
   }
 
   private buildMetrics(raw: RawMetricsInput): ResourceMetrics {
@@ -163,6 +206,8 @@ export class ResourceAwareAI {
       baseline_co2_g,
       tokens_estimated,
       cache_hit,
+      cache_hit_type = cache_hit ? "exact" : null,
+      cache_similarity = null,
     } = raw;
 
     const { system, unit, bottleSizeMl, bottleSizeDisplay } = this.unitCtx;
@@ -173,8 +218,6 @@ export class ResourceAwareAI {
     const co2_saved_percent = calculateSavings(co2_g, baseline_co2_g);
     const bottles_saved = mlToBottles(water_saved_ml, bottleSizeMl);
 
-    // Update session totals BEFORE composing the snapshot so the metrics
-    // include the contribution from this very request.
     this.sessionRequests++;
     if (cache_hit) this.sessionCacheHits++;
     this.sessionEnergyKwh += energy_kwh;
@@ -219,6 +262,9 @@ export class ResourceAwareAI {
 
       tokens_estimated,
       cache_hit,
+      cache_hit_type,
+      cache_similarity,
+
       session: this.buildSessionSummary(),
     };
   }
@@ -229,33 +275,34 @@ export class ResourceAwareAI {
 
     this.providerCounts[providerName] = (this.providerCounts[providerName] ?? 0) + 1;
 
-    // Check cache FIRST so cache hits (which consume zero resources) cannot
-    // be incorrectly rejected by `constraints`.
+    // ── 1. Exact-match cache (cheap; no embedding required) ────────────────
     const cacheKey = this.cache ? this.cache.hash(model, messages, providerName) : null;
     if (this.cache && cacheKey && this.cache.has(cacheKey)) {
       const cached = this.cache.get(cacheKey)!;
-
-      this.cacheSavings.requests += 1;
-      this.cacheSavings.energy_wh += cached.metrics.energy_kwh * 1000;
-      this.cacheSavings.water_ml += cached.metrics.water_ml;
-      this.cacheSavings.co2_g += cached.metrics.co2_g;
-
-      const cacheMetrics = this.buildMetrics({
-        energy_kwh: 0,
-        water_ml: 0,
-        co2_g: 0,
-        baseline_water_ml: cached.metrics.baseline_water_ml,
-        baseline_co2_g: cached.metrics.baseline_co2_g,
-        tokens_estimated: cached.metrics.tokens_estimated,
-        cache_hit: true,
-      });
-      return {
-        output: cached.output,
-        metrics: cacheMetrics,
-        footnote: generateFootnote(cacheMetrics),
-      };
+      this.recordCacheHit(cached, "exact");
+      return this.buildCacheHitResponse(cached, "exact", null);
     }
 
+    // ── 2. Semantic cache (requires embedder) ──────────────────────────────
+    let queryEmbedding: number[] | null = null;
+    if (this.semanticCache && this.embedder) {
+      try {
+        queryEmbedding = await this.embedder(canonicalizeMessages(messages));
+      } catch (err) {
+        // Embedder failures degrade to "no semantic hit" rather than break the call.
+        queryEmbedding = null;
+        void err;
+      }
+      if (queryEmbedding && queryEmbedding.length > 0) {
+        const hit = this.semanticCache.findSimilar(queryEmbedding, this.semanticCacheThreshold);
+        if (hit) {
+          this.recordCacheHit(hit.response, "semantic");
+          return this.buildCacheHitResponse(hit.response, "semantic", hit.similarity);
+        }
+      }
+    }
+
+    // ── 3. Real call ───────────────────────────────────────────────────────
     const tokens = estimateTokensFromMessages(messages);
     const kwh = estimateEnergy(tokens, model, this.customEstimator);
     const water = computeWaterMetrics(kwh, this.regionFactor, this.baselineFactor);
@@ -292,11 +339,189 @@ export class ResourceAwareAI {
       cache_hit: false,
     });
 
-    if (this.cache && cacheKey) {
-      this.cache.set(cacheKey, result);
+    if (this.cache && cacheKey) this.cache.set(cacheKey, result);
+    if (this.semanticCache && queryEmbedding && queryEmbedding.length > 0) {
+      this.semanticCache.add(queryEmbedding, result, `${providerName}:${model}`);
     }
 
     return result;
+  }
+
+  private recordCacheHit(cached: ChatResponse, kind: "exact" | "semantic"): void {
+    this.cacheSavings.requests += 1;
+    if (kind === "exact") this.cacheSavings.exact_hits = (this.cacheSavings.exact_hits ?? 0) + 1;
+    else this.cacheSavings.semantic_hits = (this.cacheSavings.semantic_hits ?? 0) + 1;
+    this.cacheSavings.energy_wh += cached.metrics.energy_kwh * 1000;
+    this.cacheSavings.water_ml += cached.metrics.water_ml;
+    this.cacheSavings.co2_g += cached.metrics.co2_g;
+  }
+
+  private buildCacheHitResponse(
+    cached: ChatResponse,
+    kind: "exact" | "semantic",
+    similarity: number | null,
+  ): ChatResponse {
+    const cacheMetrics = this.buildMetrics({
+      energy_kwh: 0,
+      water_ml: 0,
+      co2_g: 0,
+      baseline_water_ml: cached.metrics.baseline_water_ml,
+      baseline_co2_g: cached.metrics.baseline_co2_g,
+      tokens_estimated: cached.metrics.tokens_estimated,
+      cache_hit: true,
+      cache_hit_type: kind,
+      cache_similarity: similarity,
+    });
+    return {
+      output: cached.output,
+      metrics: cacheMetrics,
+      footnote: generateFootnote(cacheMetrics),
+    };
+  }
+
+  /**
+   * Tiered routing: try the smallest tier first; escalate to the next tier
+   * only if the previous response's confidence falls below
+   * `router.confidenceThreshold`. The returned response is whichever tier
+   * answered confidently, or the largest tier if nothing crossed the bar.
+   *
+   * `metrics.router` on the returned response describes what happened, and
+   * cumulative router stats land in `getStats().router` and
+   * `metrics.session.router`.
+   */
+  async chatWithRouting(options: RoutedChatOptions): Promise<ChatResponse> {
+    const { router, messages, mode, constraints } = options;
+    const tiers = router.tiers ?? [];
+    if (tiers.length === 0) {
+      throw new ResourceAwareAIError({
+        code: "CONFIG_ERROR",
+        message: "chatWithRouting requires at least one tier in router.tiers.",
+      });
+    }
+    const threshold = router.confidenceThreshold ?? DEFAULT_CONFIDENCE_THRESHOLD;
+    const confidenceFn: ConfidenceFn = router.confidenceFn ?? defaultConfidenceFn;
+
+    let chosen: ChatResponse | null = null;
+    let chosenTierIndex = 0;
+    let chosenConfidence = 0;
+    let attempts = 0;
+    let totalEnergyKwh = 0;
+    let totalWaterMl = 0;
+    let totalCo2G = 0;
+
+    for (let i = 0; i < tiers.length; i++) {
+      const tier = tiers[i]!;
+      attempts += 1;
+      const response = await this.chat({
+        model: tier.model,
+        provider: tier.provider,
+        messages,
+        ...(mode !== undefined ? { mode } : {}),
+        ...(constraints !== undefined ? { constraints } : {}),
+      });
+
+      totalEnergyKwh += response.metrics.energy_kwh;
+      totalWaterMl += response.metrics.water_ml;
+      totalCo2G += response.metrics.co2_g;
+
+      const rawConfidence = await confidenceFn(
+        { text: response.output, ...(response.metrics.tokens_estimated > 0 ? { usage: { total_tokens: response.metrics.tokens_estimated } } : {}) },
+        { tier, tierIndex: i, messages },
+      );
+
+      // Defensive clamp: a misbehaving confidenceFn shouldn't silently corrupt
+      // routing decisions or session counters. NaN, ±Infinity, and out-of-range
+      // values all collapse to a safe number in [0, 1].
+      let confidence: number;
+      if (typeof rawConfidence !== "number" || !Number.isFinite(rawConfidence)) {
+        confidence = 0;
+      } else if (rawConfidence < 0) {
+        confidence = 0;
+      } else if (rawConfidence > 1) {
+        confidence = 1;
+      } else {
+        confidence = rawConfidence;
+      }
+
+      chosen = response;
+      chosenTierIndex = i;
+      chosenConfidence = confidence;
+
+      if (confidence >= threshold) break;
+    }
+
+    // chosen is non-null because tiers.length > 0 and we always enter the loop
+    const finalResponse = chosen!;
+    const finalTier = tiers[chosenTierIndex]!;
+
+    // ── Compute "vs largest tier" savings using the actual response token
+    // count as the basis for what the largest tier *would* have used.
+    const largestTier = tiers[tiers.length - 1]!;
+    const respTokens = finalResponse.metrics.tokens_estimated;
+    const largestKwh = estimateEnergy(respTokens, largestTier.model, this.customEstimator);
+    const largestWaterMl = largestKwh * this.regionFactor;
+    const largestCo2G = largestKwh * this.gridIntensityG;
+
+    const energy_saved_vs_largest_kwh = largestKwh - totalEnergyKwh;
+    const water_saved_vs_largest_ml = largestWaterMl - totalWaterMl;
+    const co2_saved_vs_largest_g = largestCo2G - totalCo2G;
+
+    const routerMetrics: RouterMetrics = {
+      tier_used: chosenTierIndex,
+      tiers_attempted: attempts,
+      confidence: chosenConfidence,
+      escalated: chosenTierIndex > 0,
+      model_chosen: finalTier.model,
+      provider_chosen: finalTier.provider,
+      energy_saved_vs_largest_kwh,
+      water_saved_vs_largest_ml,
+      co2_saved_vs_largest_g,
+    };
+
+    // Update router session totals
+    if (!this.routerSession) {
+      this.routerSession = {
+        routed_requests: 0,
+        escalations: 0,
+        tier_usage: new Array(tiers.length).fill(0),
+        energy_saved_vs_largest_kwh: 0,
+        water_saved_vs_largest_ml: 0,
+        co2_saved_vs_largest_g: 0,
+      };
+    }
+    // Grow tier_usage if the caller used a longer tier ladder than before
+    while (this.routerSession.tier_usage.length <= chosenTierIndex) {
+      this.routerSession.tier_usage.push(0);
+    }
+    this.routerSession.routed_requests += 1;
+    this.routerSession.tier_usage[chosenTierIndex] =
+      (this.routerSession.tier_usage[chosenTierIndex] ?? 0) + 1;
+    if (chosenTierIndex > 0) this.routerSession.escalations += 1;
+    this.routerSession.energy_saved_vs_largest_kwh += energy_saved_vs_largest_kwh;
+    this.routerSession.water_saved_vs_largest_ml += water_saved_vs_largest_ml;
+    this.routerSession.co2_saved_vs_largest_g += co2_saved_vs_largest_g;
+
+    // Attach router metadata. Re-snapshot the session so the returned
+    // metrics reflect the updated routerSession totals.
+    const enriched: ResourceMetrics = {
+      ...finalResponse.metrics,
+      router: routerMetrics,
+      session: this.buildSessionSummaryWithoutSideEffects(),
+    };
+    return {
+      output: finalResponse.output,
+      metrics: enriched,
+      footnote: finalResponse.footnote,
+    };
+  }
+
+  /**
+   * Compose a session summary without mutating any session counters. Used
+   * when we've already accumulated everything inside an inner `chat()` call
+   * and just need a fresh snapshot.
+   */
+  private buildSessionSummaryWithoutSideEffects(): SessionSummary {
+    return this.buildSessionSummary();
   }
 
   private async executeChat(
@@ -381,11 +606,19 @@ export class ResourceAwareAI {
       unit,
 
       cache_savings: { ...session.cache_savings },
+      semantic_cache_size: this.semanticCache?.size() ?? 0,
       equivalents_used: session.equivalents_used,
       equivalents_saved: session.equivalents_saved,
 
+      router: session.router,
+
       provider_distribution: { ...this.providerCounts },
     };
+  }
+
+  /** Total entries currently held in the semantic cache. */
+  getSemanticCacheSize(): number {
+    return this.semanticCache?.size() ?? 0;
   }
 
   resetSession(): void {
@@ -398,15 +631,21 @@ export class ResourceAwareAI {
     this.sessionCo2SavedG = 0;
     this.sessionBottlesSaved = 0;
     this.cacheSavings.requests = 0;
+    this.cacheSavings.exact_hits = 0;
+    this.cacheSavings.semantic_hits = 0;
     this.cacheSavings.energy_wh = 0;
     this.cacheSavings.water_ml = 0;
     this.cacheSavings.co2_g = 0;
+    this.routerSession = null;
     Object.keys(this.providerCounts).forEach((k) => delete this.providerCounts[k]);
   }
 
   clearCache(): void {
     this.cache?.clear();
+    this.semanticCache?.clear();
   }
 }
 
 void ZERO_EQUIVALENTS;
+void Object.assign as never;
+type _RouterTier = RouterTier;

@@ -23,6 +23,8 @@ Wrap any call to OpenAI, Anthropic, Gemini, Mistral, Cohere, Ollama, or any cust
 - [How carbon emissions are calculated](#how-carbon-emissions-are-calculated)
 - [Human-scale equivalents](#human-scale-equivalents)
 - [Cache savings tracking](#cache-savings-tracking)
+- [Semantic caching](#semantic-caching)
+- [Smart model routing](#smart-model-routing)
 - [Precision and the savings calculator](#precision-and-the-savings-calculator)
 - [Understanding AI water consumption — myths vs facts](#understanding-ai-water-consumption--myths-vs-facts)
 - [Contributing](#contributing)
@@ -361,9 +363,14 @@ Every field in `metrics` is plain JSON-safe and ready to render:
 | `session.co2_saved_g` | number | Cumulative CO₂ saved vs baseline |
 | `session.bottles_saved` | number | Cumulative bottles saved (same as `bottles_saved_session`) |
 | `session.cache_savings.requests` | number | Number of cache hits that avoided a real call |
+| `session.cache_savings.exact_hits` | number | Subset of `requests` served by the exact-match cache |
+| `session.cache_savings.semantic_hits` | number | Subset of `requests` served by the semantic cache |
 | `session.cache_savings.energy_wh` | number | Energy avoided **specifically by cache hits** |
 | `session.cache_savings.water_ml` | number | Water avoided **specifically by cache hits** |
 | `session.cache_savings.co2_g` | number | CO₂ avoided **specifically by cache hits** |
+| `cache_hit_type` | "exact" \| "semantic" \| null | Set on cache hits; `null` otherwise |
+| `cache_similarity` | number \| null | Cosine similarity for semantic hits (0–1); `null` otherwise |
+| `router` | object \| undefined | Set on `chatWithRouting()` responses; see [Smart model routing](#smart-model-routing) |
 | `session.equivalents_used` | object | Session totals expressed in human-scale units |
 | `session.equivalents_saved` | object | Session savings expressed in human-scale units |
 
@@ -454,12 +461,20 @@ await ai.chat({
 
 ### Caching
 
-Identical requests (same model + same messages) are returned instantly from an in-memory cache, with `0 ml` water charged. Useful for retries, common questions, and demos.
+Two layers, both opt-out friendly:
 
 ```typescript
-const ai = new ResourceAwareAI({ enableCache: true });   // default
-ai.clearCache();    // flush manually
+const ai = new ResourceAwareAI({
+  enableCache:         true,   // exact-match cache (default ON)
+  enableSemanticCache: true,   // fuzzy embedding-based cache (default OFF)
+  embedder:            myEmbedFn,                 // required for semantic cache
+  semanticCacheThreshold:  0.95,                  // cosine cutoff (default 0.95)
+  semanticCacheMaxSize:    1000,                  // FIFO eviction limit (default 1000)
+});
+ai.clearCache();   // flushes BOTH caches
 ```
+
+The exact-match cache returns identical requests (same model + same messages + same provider) instantly with `0 ml` water charged. The semantic cache catches *paraphrases* of previously-seen prompts. See [Semantic caching](#semantic-caching) below.
 
 ### Imperial units
 
@@ -490,6 +505,10 @@ Send a chat completion request. Returns:
 }
 ```
 
+### `ai.chatWithRouting(options) → Promise<ChatResponse>`
+
+Run a tiered routing flow: try the smallest tier first, escalate only when its confidence falls below `confidenceThreshold`. Returns the same `ChatResponse` shape as `chat()`, plus `metrics.router` describing what tier answered. See [Smart model routing](#smart-model-routing) for the full contract.
+
 ### `ai.registerProvider(name, adapter) → this`
 
 Register a custom provider or override a built-in one.
@@ -497,6 +516,14 @@ Register a custom provider or override a built-in one.
 ### `ai.setEstimator(fn) → this`
 
 Replace the energy estimation function.
+
+### `ai.setEmbedder(fn) → this`
+
+Set or replace the embedder used by the semantic cache. Same signature as the `embedder` config field.
+
+### `ai.getSemanticCacheSize() → number`
+
+Number of entries currently held in the semantic cache (0 if it's disabled).
 
 ### `ai.getStats()`
 
@@ -534,15 +561,28 @@ Returns cumulative session statistics:
 
   // Cache savings (session-cumulative, hits only)
   cache_savings: {
-    requests:   number,
-    energy_wh:  number,
-    water_ml:   number,
-    co2_g:      number,
+    requests:       number,   // total cache hits
+    exact_hits:     number,   // subset served from the exact-match cache
+    semantic_hits:  number,   // subset served from the semantic cache
+    energy_wh:      number,
+    water_ml:       number,
+    co2_g:          number,
   },
+  semantic_cache_size: number,    // entries currently stored
 
   // Human-scale equivalents
   equivalents_used:  { google_searches, smartphone_charges, km_driven, led_bulb_hours, shower_seconds },
   equivalents_saved: { google_searches, smartphone_charges, km_driven, led_bulb_hours, shower_seconds },
+
+  // Router (present once chatWithRouting() has been called)
+  router?: {
+    routed_requests:               number,
+    escalations:                   number,   // # routed calls that escalated past tier 0
+    tier_usage:                    number[], // counts per tier index
+    energy_saved_vs_largest_kwh:   number,
+    water_saved_vs_largest_ml:     number,
+    co2_saved_vs_largest_g:        number,
+  },
 
   provider_distribution: Record<string, number>,
 }
@@ -554,7 +594,7 @@ Zero out the session counters (useful when starting a new conversation).
 
 ### `ai.clearCache()`
 
-Flush the response cache.
+Flush **both** caches — the exact-match cache and the semantic cache (if enabled).
 
 ### Helper exports
 
@@ -681,14 +721,238 @@ On every cache hit:
 
 ```ts
 session.cache_savings = {
-  requests:   number,   // # of cache hits so far
-  energy_wh:  number,   // energy avoided by cache hits
-  water_ml:   number,   // water avoided by cache hits
-  co2_g:      number,   // CO₂ avoided by cache hits
+  requests:       number,   // total cache hits so far
+  exact_hits:     number,   // subset from the exact-match cache
+  semantic_hits:  number,   // subset from the semantic cache
+  energy_wh:      number,   // energy avoided by cache hits
+  water_ml:       number,   // water avoided by cache hits
+  co2_g:          number,   // CO₂ avoided by cache hits
 }
 ```
 
 This makes "your cache saved 4.2 g of CO₂ today" trivial to render. The footnote also gains a final `Cache savings (session): …` line as soon as the first cache hit occurs.
+
+Per-response, every cache hit also exposes:
+
+- `metrics.cache_hit_type` — `"exact"` or `"semantic"`
+- `metrics.cache_similarity` — cosine similarity (0–1) for semantic hits, `null` for exact hits
+
+---
+
+## Semantic caching
+
+The exact-match cache only fires on byte-identical prompts. In real workloads, users phrase the same question 50 different ways — *"What's the weather?"*, *"Give me the forecast"*, *"Is it going to rain?"* — and an exact-match cache misses all of them.
+
+The **semantic cache** fixes that. It stores the embedding of every successfully-answered prompt, and on every new request:
+
+1. Embeds the new prompt.
+2. Finds the closest stored embedding by **cosine similarity**.
+3. If that similarity ≥ `semanticCacheThreshold`, it returns the cached response with `cache_hit: true`, `cache_hit_type: "semantic"`, and `cache_similarity` set to the actual similarity score.
+4. Otherwise the request goes to the provider, and the new `(embedding, response)` pair is stored.
+
+### Why this matters for sustainability
+
+Real-world chat apps see exact-match hit rates of **5–10%**. Semantic caching typically lifts that to **30–60%** — every one of those extra hits is a full inference call (and its associated water + CO₂) avoided. The marginal cost is one cheap embedding call per request.
+
+### Configuration
+
+```typescript
+import { ResourceAwareAI } from "resource-aware-ai";
+
+const ai = new ResourceAwareAI({
+  enableSemanticCache:    true,    // default false
+  embedder:               myEmbedder,            // required
+  semanticCacheThreshold: 0.95,    // cosine cutoff, default 0.95
+  semanticCacheMaxSize:   1000,    // FIFO limit, default 1000
+});
+```
+
+### Plugging in an embedder
+
+The SDK ships **without** a default embedder so it stays dependency-free. You supply any function `(text: string) => number[] | Promise<number[]>`.
+
+**Option 1 — OpenAI embeddings (cheap, hosted):**
+
+```typescript
+import OpenAI from "openai";
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+const ai = new ResourceAwareAI({
+  enableSemanticCache: true,
+  embedder: async (text) => {
+    const r = await openai.embeddings.create({
+      model: "text-embedding-3-small",
+      input: text,
+    });
+    return r.data[0].embedding;
+  },
+});
+```
+
+**Option 2 — Local MiniLM via `@xenova/transformers` (zero per-call cost, ~80 MB model):**
+
+```typescript
+import { pipeline } from "@xenova/transformers";
+const embed = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
+
+const ai = new ResourceAwareAI({
+  enableSemanticCache: true,
+  embedder: async (text) => {
+    const out = await embed(text, { pooling: "mean", normalize: true });
+    return Array.from(out.data as Float32Array);
+  },
+});
+```
+
+**Option 3 — Anything else.** Cohere `embed-v3`, Google `text-embedding-004`, your own model — anything that returns a fixed-length numeric vector works.
+
+### Choosing a threshold
+
+| Threshold | Behaviour | Best for |
+|-----------|-----------|----------|
+| `0.99` | Near-identical paraphrases only | Compliance-sensitive workloads where false positives are unacceptable |
+| `0.95` *(default)* | Tight paraphrases of the same intent | General chat / Q&A apps |
+| `0.90` | Looser — same topic, different angle | High-volume FAQ bots, support assistants |
+| `0.85` | Aggressive — broad topical match | Internal tools where wrong-answer cost is low |
+
+If you're not sure, start at `0.95` and watch `metrics.cache_similarity` on the hits you see — lower the threshold only if you're missing matches you wanted to catch.
+
+### Behaviour & guarantees
+
+- **Exact cache wins.** The exact-match cache is checked first; the embedder isn't called when an exact hit exists.
+- **Failures are silent.** If the embedder throws or returns an empty vector, the SDK degrades to "no semantic hit" — your call still succeeds and goes to the provider.
+- **Eviction is FIFO** once `semanticCacheMaxSize` is reached.
+- **Best-of-N matching.** The SDK returns the *most* similar entry above threshold, not just the first.
+- **`clearCache()` flushes both** the exact and semantic caches.
+- **Provider-scoped storage.** The exact-match cache key includes the provider name; the semantic cache currently does not, so cross-provider semantic hits are possible (treat embeddings as the answer-fingerprint, not the provider-fingerprint). If you need strict provider isolation in the semantic layer, run a separate `ResourceAwareAI` instance per provider.
+
+### Limitations
+
+- Embedding calls have their own (small) cost. The SDK does not currently meter the embedder itself — you can call `ai.chat()` with your embedding model if you want to count that energy too.
+- Linear-scan lookup is O(N) per request. Fine up to ~10k entries; beyond that, plug in a vector DB (Qdrant, pgvector, Pinecone) and use the semantic cache primitives directly: `import { SemanticCache, cosineSimilarity } from "resource-aware-ai"`.
+
+---
+
+## Smart model routing
+
+Most apps wire every request to the same model — usually the largest one. But the majority of prompts ("summarise this", "translate this", "what's 2+2?") can be answered just as well by a model 10× cheaper and ~5–10× more energy-efficient.
+
+`chatWithRouting()` implements a **tier-up-on-uncertainty** router: it tries the smallest tier first, scores the response's confidence, and only escalates to the next tier when that confidence falls below a threshold.
+
+### Quick example
+
+```typescript
+import { ResourceAwareAI } from "resource-aware-ai";
+
+const ai = new ResourceAwareAI();
+
+const res = await ai.chatWithRouting({
+  messages: [{ role: "user", content: "What's the capital of France?" }],
+  router: {
+    tiers: [
+      { model: "gpt-4o-mini", provider: "openai" },   // try this first
+      { model: "gpt-4o",      provider: "openai" },   // escalate here only if needed
+    ],
+    confidenceThreshold: 0.7,   // default
+  },
+});
+
+console.log(res.output);                          // "The capital of France is Paris."
+console.log(res.metrics.router?.tier_used);       // 0  (small model handled it)
+console.log(res.metrics.router?.escalated);       // false
+console.log(res.metrics.router?.energy_saved_vs_largest_kwh);  // > 0
+```
+
+### How confidence is scored
+
+If you don't pass `confidenceFn`, the SDK uses `defaultConfidenceFn` — a heuristic over the response text:
+
+| Rule | Penalty |
+|------|---------|
+| Response shorter than 20 chars | −0.30 |
+| Each "I don't know" / "I'm not sure" / hedging phrase | −0.25 |
+| Each refusal phrase ("I can't help with that", …) | −0.40 |
+| Response ends with a question back to the user (length < 200) | −0.15 |
+
+Starting score is `1.0`; final score is clamped to `[0, 1]`. Empty responses score `0`. The full pattern lists are exported as `LOW_CONFIDENCE_PATTERNS` and `REFUSAL_PATTERNS` so you can extend them.
+
+### Custom confidence scoring
+
+Use logprobs, a self-check call, structured output validation, or anything else you want:
+
+```typescript
+import { defaultConfidenceFn, type ConfidenceFn } from "resource-aware-ai";
+
+const myConfidence: ConfidenceFn = (response, ctx) => {
+  // Example: combine the heuristic with a structured-output check
+  const baseline = defaultConfidenceFn(response);
+  try {
+    JSON.parse(response.text);
+    return Math.max(baseline, 0.95);   // valid JSON → confident
+  } catch {
+    return baseline * 0.5;             // invalid JSON → halve it
+  }
+};
+
+await ai.chatWithRouting({
+  messages,
+  router: { tiers, confidenceFn: myConfidence },
+});
+```
+
+`ConfidenceFn` may return a number or a `Promise<number>` — fine for self-check calls or async validators.
+
+### Per-response router metadata
+
+Every `chatWithRouting()` response carries `metrics.router`:
+
+| Field | Meaning |
+|-------|---------|
+| `tier_used` | 0-based index of the tier whose response was returned |
+| `tiers_attempted` | How many tiers actually ran (≥ `tier_used + 1`) |
+| `confidence` | The confidence score (0–1) of the returned tier's response |
+| `escalated` | `true` when `tier_used > 0` |
+| `model_chosen` | Model id of the tier that answered |
+| `provider_chosen` | Provider name of the tier that answered |
+| `energy_saved_vs_largest_kwh` | What going straight to the largest tier *would* have cost minus what we actually spent. Positive = router saved energy. |
+| `water_saved_vs_largest_ml` | Same idea, in ml of water |
+| `co2_saved_vs_largest_g` | Same idea, in g CO₂e |
+
+The "vs largest" savings use the actual response token count to estimate what the largest tier would have used — so the comparison is apples-to-apples even though the largest tier never ran.
+
+### Cumulative router stats
+
+Across the whole session, look at `getStats().router`:
+
+```typescript
+{
+  routed_requests:               number,   // total chatWithRouting() calls
+  escalations:                   number,   // calls that escalated past tier 0
+  tier_usage:                    number[], // counts per tier index
+  energy_saved_vs_largest_kwh:   number,   // cumulative
+  water_saved_vs_largest_ml:     number,
+  co2_saved_vs_largest_g:        number,
+}
+```
+
+A healthy router shows `tier_usage[0]` substantially larger than later tiers — that's where the savings come from. If most calls are escalating, your tier 0 model is probably too small for your workload.
+
+### Combining with caching
+
+`chatWithRouting()` calls `chat()` internally for each tier attempt, so **both** the exact-match and semantic caches are consulted on every tier. A second request that hits the cache pays no router cost at all, regardless of which tier originally answered.
+
+### Behaviour & guarantees
+
+- **Each tier attempt counts as a real request** in the session totals — `total_requests` reflects underlying provider work, not logical routed calls. Routed-call accounting lives in `session.router.routed_requests`.
+- **Constraint enforcement** (`max_water_ml`, `max_co2_g`, `max_kwh`) applies to *each tier attempt independently*. If a small tier passes but its escalation would exceed the budget, the escalation throws — caller decides what to do.
+- **Empty `tiers` throws** a `ResourceAwareAIError` with code `CONFIG_ERROR`.
+- **No tier crosses the threshold?** The largest tier's response is returned anyway — better to ship the best available answer than nothing.
+
+### When NOT to use routing
+
+- For deterministic / structured-output workloads where switching models could change parsing behaviour. Either stay on one model or write a `confidenceFn` that schema-validates the output.
+- For very short prompts where the smallest tier is essentially free anyway — the routing overhead isn't worth it.
+- For interactive streaming UIs where you don't want a perceptible "the small model answered, then we waited for the big model" pause. (Tier 0 latency is added even on escalations.)
 
 ---
 

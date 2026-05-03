@@ -7,11 +7,13 @@ export type {
   UnitSystem,
   Constraints,
   ChatOptions,
+  RoutedChatOptions,
   ChatResponse,
   ResourceMetrics,
   ProviderResponse,
   ProviderAdapter,
   EstimatorFn,
+  EmbedderFn,
   ResourceAwareAIConfig,
   SDKError,
   ModelProfile,
@@ -75,3 +77,29 @@ export type { Equivalents } from "./core/equivalents.js";
 export { generateFootnote, generateInlineFootnote } from "./core/footnote.js";
 export { mlToDisplay, getUnit, mlToBottles, makeUnitContext } from "./core/units.js";
 export type { UnitContext } from "./core/units.js";
+
+// ── Semantic cache ──────────────────────────────────────────────────────────
+export { SemanticCache, cosineSimilarity, canonicalizeMessages } from "./core/semantic-cache.js";
+export type { SemanticCacheHit } from "./core/semantic-cache.js";
+
+// ── Router ──────────────────────────────────────────────────────────────────
+export {
+  defaultConfidenceFn,
+  DEFAULT_CONFIDENCE_THRESHOLD,
+  LOW_CONFIDENCE_PATTERNS,
+  REFUSAL_PATTERNS,
+  LOW_CONFIDENCE_PENALTY,
+  REFUSAL_PENALTY,
+  SHORT_RESPONSE_PENALTY,
+  QUESTION_BACK_PENALTY,
+  SHORT_RESPONSE_THRESHOLD,
+  QUESTION_BACK_LENGTH_LIMIT,
+} from "./core/router.js";
+export type {
+  RouterTier,
+  RouterOptions,
+  RouterMetrics,
+  RouterSessionTotals,
+  RouterDecisionContext,
+  ConfidenceFn,
+} from "./core/router.js";
