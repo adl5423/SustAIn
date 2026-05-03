@@ -1,6 +1,6 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi } from "vitest";
 import { ResourceAwareAI, ResourceAwareAIError } from "../src/index.js";
-import type { ProviderAdapter, Message } from "../src/index.js";
+import type { ProviderAdapter } from "../src/index.js";
 
 function makeMockProvider(text = "Mock response"): ProviderAdapter {
   return {
@@ -23,10 +23,15 @@ describe("ResourceAwareAI.chat — core response shape", () => {
 
     expect(res.output).toBe("Mock response");
     expect(res.metrics.energy_kwh).toBeGreaterThan(0);
+    expect(res.metrics.energy_wh).toBeCloseTo(res.metrics.energy_kwh * 1000, 10);
     expect(res.metrics.water_ml).toBeGreaterThan(0);
     expect(res.metrics.baseline_water_ml).toBeGreaterThan(0);
     expect(res.metrics.water_saved_ml).toBeGreaterThanOrEqual(0);
     expect(res.metrics.water_saved_percent).toBeGreaterThanOrEqual(0);
+    expect(res.metrics.co2_g).toBeGreaterThan(0);
+    expect(res.metrics.baseline_co2_g).toBeGreaterThan(0);
+    expect(res.metrics.equivalents.google_searches).toBeGreaterThan(0);
+    expect(res.metrics.session.requests).toBe(1);
     expect(res.footnote).toBeTruthy();
   });
 
@@ -68,6 +73,23 @@ describe("ResourceAwareAI.chat — comparison metrics", () => {
     expect(res.metrics.water_saved_percent).toBeGreaterThan(0);
   });
 
+  it("provides carbon comparison fields", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false, region: "fr" });
+    ai.registerProvider("mock", makeMockProvider());
+    const res = await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+    expect(res.metrics.region).toBe("fr");
+    expect(res.metrics.grid_intensity_g_per_kwh).toBe(56);
+    expect(res.metrics.baseline_co2_g).toBeGreaterThan(res.metrics.co2_g);
+    expect(res.metrics.co2_saved_g).toBeCloseTo(
+      res.metrics.baseline_co2_g - res.metrics.co2_g, 6
+    );
+    expect(res.metrics.co2_saved_percent).toBeGreaterThan(0);
+  });
+
   it("footnote contains both used and baseline figures", async () => {
     const ai = new ResourceAwareAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
@@ -80,6 +102,34 @@ describe("ResourceAwareAI.chat — comparison metrics", () => {
     expect(res.footnote).toContain("Without system");
     expect(res.footnote).toContain("Water saved");
     expect(res.footnote).toContain("Bottles saved");
+    expect(res.footnote).toContain("Carbon");
+    expect(res.footnote).toContain("In human terms");
+  });
+});
+
+describe("ResourceAwareAI.chat — region overrides", () => {
+  it("respects custom gridIntensityG override", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false, gridIntensityG: 100 });
+    ai.registerProvider("mock", makeMockProvider());
+    const res = await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+    expect(res.metrics.grid_intensity_g_per_kwh).toBe(100);
+    expect(res.metrics.co2_g).toBeCloseTo(res.metrics.energy_kwh * 100, 6);
+  });
+
+  it("respects custom baselineGridIntensityG override", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false, baselineGridIntensityG: 1500 });
+    ai.registerProvider("mock", makeMockProvider());
+    const res = await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "Hi" }],
+    });
+    expect(res.metrics.baseline_grid_intensity_g_per_kwh).toBe(1500);
+    expect(res.metrics.baseline_co2_g).toBeCloseTo(res.metrics.energy_kwh * 1500, 6);
   });
 });
 
@@ -215,6 +265,19 @@ describe("ResourceAwareAI.chat — errors", () => {
       })
     ).rejects.toMatchObject({ sdkError: { code: "RESOURCE_LIMIT_EXCEEDED" } });
   });
+
+  it("throws RESOURCE_LIMIT_EXCEEDED when CO₂ limit exceeded", async () => {
+    const ai = new ResourceAwareAI({ enableCache: false });
+    ai.registerProvider("mock", makeMockProvider());
+    await expect(
+      ai.chat({
+        model: "gpt-4o",
+        provider: "mock",
+        messages: [{ role: "user", content: "A".repeat(10000) }],
+        constraints: { max_co2_g: 0.000001 },
+      })
+    ).rejects.toMatchObject({ sdkError: { code: "RESOURCE_LIMIT_EXCEEDED" } });
+  });
 });
 
 describe("ResourceAwareAI.chat — custom estimator", () => {
@@ -232,7 +295,7 @@ describe("ResourceAwareAI.chat — custom estimator", () => {
 });
 
 describe("ResourceAwareAI.getStats", () => {
-  it("tracks requests and water totals", async () => {
+  it("tracks requests, water, energy, and CO₂ totals", async () => {
     const ai = new ResourceAwareAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
 
@@ -242,8 +305,12 @@ describe("ResourceAwareAI.getStats", () => {
     const stats = ai.getStats();
     expect(stats.total_requests).toBe(2);
     expect(stats.total_water_ml).toBeGreaterThan(0);
+    expect(stats.total_energy_kwh).toBeGreaterThan(0);
+    expect(stats.total_co2_g).toBeGreaterThan(0);
     expect(stats.bottles_saved_session).toBeGreaterThan(0);
     expect(stats.unit).toBe("ml");
+    expect(stats.region).toBe("global");
+    expect(stats.equivalents_used.google_searches).toBeGreaterThan(0);
   });
 
   it("reports imperial units in stats when configured", async () => {
@@ -263,5 +330,7 @@ describe("ResourceAwareAI.getStats", () => {
     const stats = ai.getStats();
     expect(stats.total_requests).toBe(0);
     expect(stats.bottles_saved_session).toBe(0);
+    expect(stats.total_co2_g).toBe(0);
+    expect(stats.cache_savings.requests).toBe(0);
   });
 });

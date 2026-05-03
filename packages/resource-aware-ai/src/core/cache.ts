@@ -4,8 +4,8 @@ import { createHash } from "node:crypto";
 export class ResponseCache {
   private readonly store = new Map<string, ChatResponse>();
 
-  hash(model: string, messages: Message[]): string {
-    const payload = JSON.stringify({ model, messages });
+  hash(model: string, messages: Message[], provider?: string): string {
+    const payload = JSON.stringify({ provider: provider ?? "", model, messages });
     return createHash("sha256").update(payload).digest("hex");
   }
 

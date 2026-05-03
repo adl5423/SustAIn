@@ -1,3 +1,5 @@
+import type { Equivalents } from "./core/equivalents.js";
+
 export type Role = "user" | "system" | "assistant";
 
 export interface Message {
@@ -11,6 +13,7 @@ export type UnitSystem = "metric" | "imperial";
 export interface Constraints {
   max_water_ml?: number;
   max_kwh?: number;
+  max_co2_g?: number;
 }
 
 export interface ChatOptions {
@@ -21,9 +24,34 @@ export interface ChatOptions {
   constraints?: Constraints;
 }
 
-export interface ResourceMetrics {
-  energy_kwh: number;
+export interface CacheSavingsTotals {
+  requests: number;
+  energy_wh: number;
+  water_ml: number;
+  co2_g: number;
+}
 
+export interface SessionSummary {
+  requests: number;
+  cache_hits: number;
+  cache_hit_rate: number;
+  energy_kwh: number;
+  water_ml: number;
+  co2_g: number;
+  water_saved_ml: number;
+  co2_saved_g: number;
+  bottles_saved: number;
+  cache_savings: CacheSavingsTotals;
+  equivalents_used: Equivalents;
+  equivalents_saved: Equivalents;
+}
+
+export interface ResourceMetrics {
+  // ── Energy ─────────────────────────────────────────────────────────────────
+  energy_kwh: number;
+  energy_wh: number;
+
+  // ── Water ──────────────────────────────────────────────────────────────────
   water_ml: number;
   baseline_water_ml: number;
   water_saved_ml: number;
@@ -34,12 +62,29 @@ export interface ResourceMetrics {
   water_saved_display: number;
   unit: string;
 
-  tokens_estimated: number;
-  cache_hit: boolean;
-
   bottles_saved: number;
   bottles_saved_session: number;
   bottle_size_display: number;
+
+  // ── Carbon ─────────────────────────────────────────────────────────────────
+  co2_g: number;
+  baseline_co2_g: number;
+  co2_saved_g: number;
+  co2_saved_percent: number;
+  co2_saved_session_g: number;
+  region: string;
+  grid_intensity_g_per_kwh: number;
+  baseline_grid_intensity_g_per_kwh: number;
+
+  // ── Human-scale equivalents (this request) ─────────────────────────────────
+  equivalents: Equivalents;
+
+  // ── Tokens & cache flag ────────────────────────────────────────────────────
+  tokens_estimated: number;
+  cache_hit: boolean;
+
+  // ── Session snapshot (cumulative since last reset) ─────────────────────────
+  session: SessionSummary;
 }
 
 export interface ChatResponse {
@@ -70,6 +115,9 @@ export interface ResourceAwareAIConfig {
   customEstimator?: EstimatorFn;
   unitSystem?: UnitSystem;
   bottleSizeMl?: number;
+  region?: string;
+  gridIntensityG?: number;
+  baselineGridIntensityG?: number;
 }
 
 export interface ResourceLimitError {
@@ -79,6 +127,8 @@ export interface ResourceLimitError {
     water_limit?: number;
     energy_kwh?: number;
     energy_limit?: number;
+    co2_g?: number;
+    co2_limit?: number;
   };
 }
 
