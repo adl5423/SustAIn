@@ -1,5 +1,5 @@
-export { ResourceAwareAI } from "./client.js";
-export { ResourceAwareAIError } from "./types.js";
+export { SustainAI } from "./client.js";
+export { SustainAIError } from "./types.js";
 export type {
   Message,
   Role,
@@ -14,7 +14,7 @@ export type {
   ProviderAdapter,
   EstimatorFn,
   EmbedderFn,
-  ResourceAwareAIConfig,
+  SustainAIConfig,
   SDKError,
   ModelProfile,
   SessionSummary,

@@ -6,7 +6,7 @@ import {
   computeWaterMetrics,
 } from "../src/core/calculator.js";
 import { computeCarbonMetrics } from "../src/core/carbon.js";
-import { ResourceAwareAI } from "../src/index.js";
+import { SustainAI } from "../src/index.js";
 import type { ProviderAdapter } from "../src/index.js";
 
 function mock(text = "ok"): ProviderAdapter {
@@ -66,7 +66,7 @@ describe("computeCarbonMetrics — precision", () => {
 
 describe("Session totals — precision and additivity", () => {
   it("session.water_ml equals the sum of per-request water_ml across calls", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", mock());
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "" }] };
 
@@ -79,7 +79,7 @@ describe("Session totals — precision and additivity", () => {
   });
 
   it("session.co2_g equals the sum of per-request co2_g across calls", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false, region: "fr" });
+    const ai = new SustainAI({ enableCache: false, region: "fr" });
     ai.registerProvider("mock", mock());
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "" }] };
 
@@ -90,7 +90,7 @@ describe("Session totals — precision and additivity", () => {
   });
 
   it("session.water_saved_ml equals sum of saved across calls", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", mock());
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "x" }] };
 
@@ -106,7 +106,7 @@ describe("Session totals — precision and additivity", () => {
 
 describe("Cache safety", () => {
   it("cache hit bypasses constraint enforcement (actual usage is zero)", async () => {
-    const ai = new ResourceAwareAI({ enableCache: true });
+    const ai = new SustainAI({ enableCache: true });
     ai.registerProvider("mock", mock("ok"));
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "Hi" }] };
 
@@ -119,7 +119,7 @@ describe("Cache safety", () => {
   });
 
   it("cache key includes provider — same model+messages on different providers do not collide", async () => {
-    const ai = new ResourceAwareAI({ enableCache: true });
+    const ai = new SustainAI({ enableCache: true });
     ai.registerProvider("p1", mock("from-p1"));
     ai.registerProvider("p2", mock("from-p2"));
     const messages = [{ role: "user" as const, content: "Same question" }];
@@ -135,7 +135,7 @@ describe("Cache safety", () => {
 
 describe("Cache savings — precision", () => {
   it("cache hit reports 0 actual and accumulates avoided cost in cache_savings", async () => {
-    const ai = new ResourceAwareAI({ enableCache: true });
+    const ai = new SustainAI({ enableCache: true });
     ai.registerProvider("mock", mock("cached"));
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "Q" }] };
 
@@ -158,7 +158,7 @@ describe("Cache savings — precision", () => {
   });
 
   it("cache hit credits full baseline as saved (savings_percent = 100)", async () => {
-    const ai = new ResourceAwareAI({ enableCache: true });
+    const ai = new SustainAI({ enableCache: true });
     ai.registerProvider("mock", mock());
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "Z" }] };
     await ai.chat(opts);

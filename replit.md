@@ -6,7 +6,7 @@ pnpm workspace monorepo using TypeScript. Each package manages its own dependenc
 
 ## Packages
 
-### `resource-aware-ai` (`packages/resource-aware-ai`)
+### `sustain-ai` (`packages/resource-aware-ai`)
 
 A provider-agnostic Node.js/TypeScript SDK that wraps any LLM call and returns energy + water usage metrics with a human-readable sustainability footnote.
 

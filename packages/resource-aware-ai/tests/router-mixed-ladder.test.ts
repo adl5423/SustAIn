@@ -1,5 +1,5 @@
 import { describe, it, expect } from "vitest";
-import { ResourceAwareAI } from "../src/index.js";
+import { SustainAI } from "../src/index.js";
 import type { ProviderAdapter } from "../src/index.js";
 
 function provider(text: string): ProviderAdapter {
@@ -12,7 +12,7 @@ function provider(text: string): ProviderAdapter {
 
 describe("Router — mixed-length tier ladders across calls", () => {
   it("grows tier_usage when a later call uses a longer ladder", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("a", provider("Confident answer one."));
     ai.registerProvider("b", provider("Confident answer two."));
     ai.registerProvider("c", provider("Confident answer three."));
@@ -48,7 +48,7 @@ describe("Router — mixed-length tier ladders across calls", () => {
   });
 
   it("clamps a NaN/out-of-range confidenceFn output without breaking", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("a", provider("anything"));
     ai.registerProvider("b", provider("anything"));
 
@@ -69,7 +69,7 @@ describe("Router — mixed-length tier ladders across calls", () => {
   });
 
   it("clamps a confidenceFn that returns > 1 to exactly 1", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("a", provider("ok"));
     const res = await ai.chatWithRouting({
       messages: [{ role: "user", content: "x" }],

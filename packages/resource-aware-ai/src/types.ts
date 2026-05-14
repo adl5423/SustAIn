@@ -159,7 +159,7 @@ export type EstimatorFn = (tokens: number, model: string) => number;
  */
 export type EmbedderFn = (text: string) => number[] | Promise<number[]>;
 
-export interface ResourceAwareAIConfig {
+export interface SustainAIConfig {
   regionFactor?: number;
   baselineFactor?: number;
   enableCache?: boolean;
@@ -227,7 +227,7 @@ export type SDKError =
   | UnknownProviderError
   | ConfigError;
 
-export class ResourceAwareAIError extends Error {
+export class SustainAIError extends Error {
   public readonly sdkError: SDKError;
 
   constructor(sdkError: SDKError) {
@@ -238,7 +238,7 @@ export class ResourceAwareAIError extends Error {
           ? sdkError.message
           : sdkError.message;
     super(msg);
-    this.name = "ResourceAwareAIError";
+    this.name = "SustainAIError";
     this.sdkError = sdkError;
   }
 }

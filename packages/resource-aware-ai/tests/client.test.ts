@@ -1,5 +1,5 @@
 import { describe, it, expect, vi } from "vitest";
-import { ResourceAwareAI, ResourceAwareAIError } from "../src/index.js";
+import { SustainAI, SustainAIError } from "../src/index.js";
 import type { ProviderAdapter } from "../src/index.js";
 
 function makeMockProvider(text = "Mock response"): ProviderAdapter {
@@ -10,9 +10,9 @@ function makeMockProvider(text = "Mock response"): ProviderAdapter {
   };
 }
 
-describe("ResourceAwareAI.chat — core response shape", () => {
+describe("SustainAI.chat — core response shape", () => {
   it("returns output, metrics, and footnote", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
 
     const res = await ai.chat({
@@ -36,7 +36,7 @@ describe("ResourceAwareAI.chat — core response shape", () => {
   });
 
   it("footnote is always present and non-empty", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider("Test"));
     const res = await ai.chat({
       model: "gpt-4o",
@@ -48,16 +48,16 @@ describe("ResourceAwareAI.chat — core response shape", () => {
   });
 
   it("usable in fewer than 5 lines of user code", async () => {
-    const ai = new ResourceAwareAI();
+    const ai = new SustainAI();
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({ model: "gpt-4o", provider: "mock", messages: [{ role: "user", content: "Hi" }] });
     expect(res.output).toBeTruthy();
   });
 });
 
-describe("ResourceAwareAI.chat — comparison metrics", () => {
+describe("SustainAI.chat — comparison metrics", () => {
   it("provides water comparison fields", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -74,7 +74,7 @@ describe("ResourceAwareAI.chat — comparison metrics", () => {
   });
 
   it("provides carbon comparison fields", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false, region: "fr" });
+    const ai = new SustainAI({ enableCache: false, region: "fr" });
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -91,7 +91,7 @@ describe("ResourceAwareAI.chat — comparison metrics", () => {
   });
 
   it("footnote contains both used and baseline figures", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -107,9 +107,9 @@ describe("ResourceAwareAI.chat — comparison metrics", () => {
   });
 });
 
-describe("ResourceAwareAI.chat — region overrides", () => {
+describe("SustainAI.chat — region overrides", () => {
   it("respects custom gridIntensityG override", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false, gridIntensityG: 100 });
+    const ai = new SustainAI({ enableCache: false, gridIntensityG: 100 });
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -121,7 +121,7 @@ describe("ResourceAwareAI.chat — region overrides", () => {
   });
 
   it("respects custom baselineGridIntensityG override", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false, baselineGridIntensityG: 1500 });
+    const ai = new SustainAI({ enableCache: false, baselineGridIntensityG: 1500 });
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -133,9 +133,9 @@ describe("ResourceAwareAI.chat — region overrides", () => {
   });
 });
 
-describe("ResourceAwareAI.chat — unit systems", () => {
+describe("SustainAI.chat — unit systems", () => {
   it("defaults to metric with ml unit", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -148,7 +148,7 @@ describe("ResourceAwareAI.chat — unit systems", () => {
   });
 
   it("converts to fl oz in imperial mode", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false, unitSystem: "imperial" });
+    const ai = new SustainAI({ enableCache: false, unitSystem: "imperial" });
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -162,7 +162,7 @@ describe("ResourceAwareAI.chat — unit systems", () => {
   });
 
   it("imperial footnote uses fl oz", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false, unitSystem: "imperial" });
+    const ai = new SustainAI({ enableCache: false, unitSystem: "imperial" });
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -173,9 +173,9 @@ describe("ResourceAwareAI.chat — unit systems", () => {
   });
 });
 
-describe("ResourceAwareAI.chat — bottles metric", () => {
+describe("SustainAI.chat — bottles metric", () => {
   it("includes bottles_saved per call", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -186,7 +186,7 @@ describe("ResourceAwareAI.chat — bottles metric", () => {
   });
 
   it("accumulates bottles_saved_session across calls", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "A" }] };
     const r1 = await ai.chat(opts);
@@ -196,8 +196,8 @@ describe("ResourceAwareAI.chat — bottles metric", () => {
 
   it("respects custom bottle size", async () => {
     const bottleSizeMl = 250;
-    const ai500 = new ResourceAwareAI({ enableCache: false, bottleSizeMl: 500 });
-    const ai250 = new ResourceAwareAI({ enableCache: false, bottleSizeMl });
+    const ai500 = new SustainAI({ enableCache: false, bottleSizeMl: 500 });
+    const ai250 = new SustainAI({ enableCache: false, bottleSizeMl });
     ai500.registerProvider("mock", makeMockProvider());
     ai250.registerProvider("mock", makeMockProvider());
 
@@ -209,10 +209,10 @@ describe("ResourceAwareAI.chat — bottles metric", () => {
   });
 });
 
-describe("ResourceAwareAI.chat — caching", () => {
+describe("SustainAI.chat — caching", () => {
   it("caches repeated identical requests", async () => {
     const generateFn = vi.fn().mockResolvedValue({ text: "Cached", usage: { total_tokens: 50 } });
-    const ai = new ResourceAwareAI({ enableCache: true });
+    const ai = new SustainAI({ enableCache: true });
     ai.registerProvider("mock", { generate: generateFn });
 
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "Same" }] };
@@ -223,7 +223,7 @@ describe("ResourceAwareAI.chat — caching", () => {
   });
 
   it("cache hit sets cache_hit=true and shows in footnote", async () => {
-    const ai = new ResourceAwareAI({ enableCache: true });
+    const ai = new SustainAI({ enableCache: true });
     ai.registerProvider("mock", makeMockProvider("Cached response"));
 
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "Repeated" }] };
@@ -235,7 +235,7 @@ describe("ResourceAwareAI.chat — caching", () => {
   });
 
   it("cache hit still increments session bottles", async () => {
-    const ai = new ResourceAwareAI({ enableCache: true });
+    const ai = new SustainAI({ enableCache: true });
     ai.registerProvider("mock", makeMockProvider());
 
     const opts = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "X" }] };
@@ -245,16 +245,16 @@ describe("ResourceAwareAI.chat — caching", () => {
   });
 });
 
-describe("ResourceAwareAI.chat — errors", () => {
-  it("throws ResourceAwareAIError for unknown provider", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+describe("SustainAI.chat — errors", () => {
+  it("throws SustainAIError for unknown provider", async () => {
+    const ai = new SustainAI({ enableCache: false });
     await expect(
       ai.chat({ model: "gpt-4o", provider: "nonexistent", messages: [{ role: "user", content: "Hi" }] })
-    ).rejects.toBeInstanceOf(ResourceAwareAIError);
+    ).rejects.toBeInstanceOf(SustainAIError);
   });
 
   it("throws RESOURCE_LIMIT_EXCEEDED when water limit exceeded", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
     await expect(
       ai.chat({
@@ -267,7 +267,7 @@ describe("ResourceAwareAI.chat — errors", () => {
   });
 
   it("throws RESOURCE_LIMIT_EXCEEDED when CO₂ limit exceeded", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
     await expect(
       ai.chat({
@@ -280,9 +280,9 @@ describe("ResourceAwareAI.chat — errors", () => {
   });
 });
 
-describe("ResourceAwareAI.chat — custom estimator", () => {
+describe("SustainAI.chat — custom estimator", () => {
   it("uses custom estimator when set", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.setEstimator(() => 999);
     ai.registerProvider("mock", makeMockProvider());
     const res = await ai.chat({
@@ -294,9 +294,9 @@ describe("ResourceAwareAI.chat — custom estimator", () => {
   });
 });
 
-describe("ResourceAwareAI.getStats", () => {
+describe("SustainAI.getStats", () => {
   it("tracks requests, water, energy, and CO₂ totals", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
 
     await ai.chat({ model: "gpt-4o", provider: "mock", messages: [{ role: "user", content: "Hello" }] });
@@ -314,7 +314,7 @@ describe("ResourceAwareAI.getStats", () => {
   });
 
   it("reports imperial units in stats when configured", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false, unitSystem: "imperial" });
+    const ai = new SustainAI({ enableCache: false, unitSystem: "imperial" });
     ai.registerProvider("mock", makeMockProvider());
     await ai.chat({ model: "gpt-4o", provider: "mock", messages: [{ role: "user", content: "Hi" }] });
     const stats = ai.getStats();
@@ -323,7 +323,7 @@ describe("ResourceAwareAI.getStats", () => {
   });
 
   it("resetSession zeroes session counters", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("mock", makeMockProvider());
     await ai.chat({ model: "gpt-4o", provider: "mock", messages: [{ role: "user", content: "A" }] });
     ai.resetSession();

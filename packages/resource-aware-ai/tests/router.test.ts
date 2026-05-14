@@ -4,7 +4,7 @@ import {
   LOW_CONFIDENCE_PATTERNS,
   DEFAULT_CONFIDENCE_THRESHOLD,
 } from "../src/core/router.js";
-import { ResourceAwareAI, ResourceAwareAIError } from "../src/index.js";
+import { SustainAI, SustainAIError } from "../src/index.js";
 import type { ProviderAdapter } from "../src/index.js";
 
 describe("defaultConfidenceFn", () => {
@@ -54,7 +54,7 @@ describe("defaultConfidenceFn", () => {
   });
 });
 
-describe("ResourceAwareAI.chatWithRouting", () => {
+describe("SustainAI.chatWithRouting", () => {
   function provider(text: string, totalTokens = 50): ProviderAdapter {
     return {
       async generate() {
@@ -64,7 +64,7 @@ describe("ResourceAwareAI.chatWithRouting", () => {
   }
 
   it("uses tier 0 when its confidence is high enough", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("small", provider("Photosynthesis converts sunlight into energy via chlorophyll."));
     ai.registerProvider("large", provider("This should not be called"));
 
@@ -85,7 +85,7 @@ describe("ResourceAwareAI.chatWithRouting", () => {
   });
 
   it("escalates to a larger tier when small tier is uncertain", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("small", provider("I don't know, could you clarify?"));
     ai.registerProvider("large", provider("The capital of France is Paris."));
 
@@ -107,7 +107,7 @@ describe("ResourceAwareAI.chatWithRouting", () => {
   });
 
   it("respects a custom confidenceFn", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("small", provider("anything"));
     ai.registerProvider("large", provider("anything"));
 
@@ -128,7 +128,7 @@ describe("ResourceAwareAI.chatWithRouting", () => {
   });
 
   it("falls back to the largest tier when nothing crosses the threshold", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("small", provider("I don't know"));
     ai.registerProvider("large", provider("I don't know either"));
 
@@ -147,17 +147,17 @@ describe("ResourceAwareAI.chatWithRouting", () => {
   });
 
   it("throws CONFIG_ERROR when tiers is empty", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     await expect(
       ai.chatWithRouting({
         messages: [{ role: "user", content: "x" }],
         router: { tiers: [] },
       }),
-    ).rejects.toBeInstanceOf(ResourceAwareAIError);
+    ).rejects.toBeInstanceOf(SustainAIError);
   });
 
   it("computes positive savings vs largest tier when it stops at tier 0", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("small", provider("Confident detailed answer about topic.", 100));
     ai.registerProvider("large", provider("unused"));
 
@@ -177,7 +177,7 @@ describe("ResourceAwareAI.chatWithRouting", () => {
   });
 
   it("accumulates router totals in session.router", async () => {
-    const ai = new ResourceAwareAI({ enableCache: false });
+    const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("small", provider("Confident answer here."));
     ai.registerProvider("large", provider("Larger model answer."));
 

@@ -4,13 +4,13 @@ import type {
   EstimatorFn,
   EmbedderFn,
   ProviderAdapter,
-  ResourceAwareAIConfig,
+  SustainAIConfig,
   ResourceMetrics,
   RoutedChatOptions,
   SessionSummary,
   CacheSavingsTotals,
 } from "./types.js";
-import { ResourceAwareAIError } from "./types.js";
+import { SustainAIError } from "./types.js";
 import { estimateTokensFromMessages, estimateEnergy } from "./core/estimator.js";
 import { computeWaterMetrics, calculateSavings } from "./core/calculator.js";
 import { computeCarbonMetrics } from "./core/carbon.js";
@@ -71,7 +71,7 @@ interface RawMetricsInput {
   cache_similarity?: number | null;
 }
 
-export class ResourceAwareAI {
+export class SustainAI {
   private readonly regionFactor: number;
   private readonly baselineFactor: number;
   private readonly cache: ResponseCache | null;
@@ -108,7 +108,7 @@ export class ResourceAwareAI {
   private routerSession: RouterSessionTotals | null = null;
   private readonly providerCounts: Record<string, number> = {};
 
-  constructor(config: ResourceAwareAIConfig = {}) {
+  constructor(config: SustainAIConfig = {}) {
     this.regionFactor = config.regionFactor ?? DEFAULT_REGION_FACTOR;
     this.baselineFactor = config.baselineFactor ?? DEFAULT_BASELINE_FACTOR;
     this.cache = config.enableCache !== false ? new ResponseCache() : null;
@@ -148,7 +148,7 @@ export class ResourceAwareAI {
     const factory = BUILTIN_PROVIDER_FACTORIES[key as BuiltinProviderName];
     if (factory) return factory();
 
-    throw new ResourceAwareAIError({
+    throw new SustainAIError({
       code: "UNKNOWN_PROVIDER",
       message: `Unknown provider "${providerName}". Available built-in providers: ${Object.keys(BUILTIN_PROVIDER_FACTORIES).join(", ")}. Use registerProvider() to add a custom one.`,
       provider: providerName,
@@ -310,19 +310,19 @@ export class ResourceAwareAI {
 
     if (constraints) {
       if (constraints.max_water_ml !== undefined && water.water_ml > constraints.max_water_ml) {
-        throw new ResourceAwareAIError({
+        throw new SustainAIError({
           code: "RESOURCE_LIMIT_EXCEEDED",
           details: { water_ml: water.water_ml, water_limit: constraints.max_water_ml },
         });
       }
       if (constraints.max_kwh !== undefined && kwh > constraints.max_kwh) {
-        throw new ResourceAwareAIError({
+        throw new SustainAIError({
           code: "RESOURCE_LIMIT_EXCEEDED",
           details: { energy_kwh: kwh, energy_limit: constraints.max_kwh },
         });
       }
       if (constraints.max_co2_g !== undefined && carbon.co2_g > constraints.max_co2_g) {
-        throw new ResourceAwareAIError({
+        throw new SustainAIError({
           code: "RESOURCE_LIMIT_EXCEEDED",
           details: { co2_g: carbon.co2_g, co2_limit: constraints.max_co2_g },
         });
@@ -393,7 +393,7 @@ export class ResourceAwareAI {
     const { router, messages, mode, constraints } = options;
     const tiers = router.tiers ?? [];
     if (tiers.length === 0) {
-      throw new ResourceAwareAIError({
+      throw new SustainAIError({
         code: "CONFIG_ERROR",
         message: "chatWithRouting requires at least one tier in router.tiers.",
       });
@@ -565,9 +565,9 @@ export class ResourceAwareAI {
         footnote: generateFootnote(metrics),
       };
     } catch (err) {
-      if (err instanceof ResourceAwareAIError) throw err;
+      if (err instanceof SustainAIError) throw err;
       const msg = err instanceof Error ? err.message : String(err);
-      throw new ResourceAwareAIError({
+      throw new SustainAIError({
         code: "PROVIDER_ERROR",
         message: msg,
         provider: providerName,

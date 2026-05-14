@@ -1,8 +1,8 @@
-# resource-aware-ai
+# SustAIn
 
 > A provider-agnostic TypeScript SDK that wraps any LLM call and returns **energy + water usage metrics** with a human-readable sustainability footnote.
 
-[![npm version](https://img.shields.io/npm/v/resource-aware-ai.svg)](https://www.npmjs.com/package/resource-aware-ai)
+[![npm version](https://img.shields.io/npm/v/sustain-ai.svg)](https://www.npmjs.com/package/sustain-ai)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 
@@ -36,7 +36,7 @@ Wrap any call to OpenAI, Anthropic, Gemini, Mistral, Cohere, Ollama, or any cust
 
 Every LLM call consumes electricity. That electricity is generated, and the generation + the data center cooling consume water. Most teams never see those numbers.
 
-`resource-aware-ai` makes the cost visible in one line of code: every response comes back with an estimated water and energy footprint, plus a baseline comparison so you can show users (and yourselves) **what the impact would have been on an unoptimized stack** versus what it actually was.
+`sustain-ai` makes the cost visible in one line of code: every response comes back with an estimated water and energy footprint, plus a baseline comparison so you can show users (and yourselves) **what the impact would have been on an unoptimized stack** versus what it actually was.
 
 It's not a guilt trip — it's a metrics layer. Use it for transparency dashboards, compliance reports, sustainability-aware routing, or just to show users a small honest footnote under each AI reply.
 
@@ -45,11 +45,11 @@ It's not a guilt trip — it's a metrics layer. Use it for transparency dashboar
 ## Installation
 
 ```bash
-npm install resource-aware-ai
+npm install sustain-ai
 # or
-pnpm add resource-aware-ai
+pnpm add sustain-ai
 # or
-yarn add resource-aware-ai
+yarn add sustain-ai
 ```
 
 Then install only the provider SDKs you actually plan to use — they're optional peer dependencies, so you don't pay the bundle cost for ones you don't need:
@@ -70,9 +70,9 @@ npm install cohere-ai                 # for Cohere
 ## Quick Start
 
 ```typescript
-import { ResourceAwareAI } from "resource-aware-ai";
+import { SustainAI } from "sustain-ai";
 
-const ai = new ResourceAwareAI();
+const ai = new SustainAI();
 
 const res = await ai.chat({
   model: "gpt-4o-mini",
@@ -113,10 +113,10 @@ The SDK ships with built-in adapters for the major providers. Each one accepts a
 ### OpenAI
 
 ```typescript
-import { ResourceAwareAI } from "resource-aware-ai";
+import { SustainAI } from "sustain-ai";
 
 // Reads from process.env.OPENAI_API_KEY automatically
-const ai = new ResourceAwareAI();
+const ai = new SustainAI();
 
 const res = await ai.chat({
   model: "gpt-4o-mini",       // also: gpt-4o, o1, o1-mini, o3, o3-mini, o4-mini, gpt-4-turbo
@@ -128,19 +128,19 @@ const res = await ai.chat({
 To pass the key explicitly:
 
 ```typescript
-import { ResourceAwareAI, OpenAIProvider } from "resource-aware-ai";
+import { SustainAI, OpenAIProvider } from "sustain-ai";
 
-const ai = new ResourceAwareAI();
+const ai = new SustainAI();
 ai.registerProvider("openai", new OpenAIProvider({ apiKey: "sk-..." }));
 ```
 
 ### Anthropic
 
 ```typescript
-import { ResourceAwareAI } from "resource-aware-ai";
+import { SustainAI } from "sustain-ai";
 
 // Reads from process.env.ANTHROPIC_API_KEY
-const ai = new ResourceAwareAI();
+const ai = new SustainAI();
 
 const res = await ai.chat({
   model: "claude-3-5-haiku-20241022",   // or claude-opus-4-5, claude-sonnet-4-5, etc.
@@ -185,9 +185,9 @@ const res = await ai.chat({
 ### Ollama (local models, no key required)
 
 ```typescript
-import { ResourceAwareAI, OllamaProvider } from "resource-aware-ai";
+import { SustainAI, OllamaProvider } from "sustain-ai";
 
-const ai = new ResourceAwareAI();
+const ai = new SustainAI();
 ai.registerProvider("ollama", new OllamaProvider({
   endpoint: "http://localhost:11434",   // default
 }));
@@ -204,9 +204,9 @@ const res = await ai.chat({
 For self-hosted or proprietary endpoints, use `GenericProvider`:
 
 ```typescript
-import { ResourceAwareAI, GenericProvider } from "resource-aware-ai";
+import { SustainAI, GenericProvider } from "sustain-ai";
 
-const ai = new ResourceAwareAI();
+const ai = new SustainAI();
 ai.registerProvider("my-llm", new GenericProvider({
   endpoint: "https://my-llm.example.com/chat",
   apiKey: process.env.MY_API_KEY,
@@ -247,12 +247,12 @@ ai.registerProvider("custom", {
 
 ```typescript
 import express from "express";
-import { ResourceAwareAI } from "resource-aware-ai";
+import { SustainAI } from "sustain-ai";
 
 const app = express();
 app.use(express.json());
 
-const ai = new ResourceAwareAI({ unitSystem: "metric" });
+const ai = new SustainAI({ unitSystem: "metric" });
 
 app.post("/api/chat", async (req, res) => {
   const { message } = req.body;
@@ -277,10 +277,10 @@ app.listen(3000);
 
 ```typescript
 // app/api/chat/route.ts
-import { ResourceAwareAI } from "resource-aware-ai";
+import { SustainAI } from "sustain-ai";
 import { NextResponse } from "next/server";
 
-const ai = new ResourceAwareAI();
+const ai = new SustainAI();
 
 export async function POST(req: Request) {
   const { message } = await req.json();
@@ -383,7 +383,7 @@ You can also call `ai.getStats()` to get aggregate session statistics — perfec
 ## Configuration
 
 ```typescript
-const ai = new ResourceAwareAI({
+const ai = new SustainAI({
   regionFactor:   1800,        // ml of water per kWh — defaults to 2000 (hybrid cooling)
   baselineFactor: 4500,        // ml/kWh for the worst-case baseline — default 4500
   enableCache:    true,        // cache identical requests — default true
@@ -456,7 +456,7 @@ await ai.chat({
     max_co2_g:    5,        // also gate on carbon
   },
 });
-// Throws ResourceAwareAIError with code "RESOURCE_LIMIT_EXCEEDED"
+// Throws SustainAIError with code "RESOURCE_LIMIT_EXCEEDED"
 ```
 
 ### Caching
@@ -464,7 +464,7 @@ await ai.chat({
 Two layers, both opt-out friendly:
 
 ```typescript
-const ai = new ResourceAwareAI({
+const ai = new SustainAI({
   enableCache:         true,   // exact-match cache (default ON)
   enableSemanticCache: true,   // fuzzy embedding-based cache (default OFF)
   embedder:            myEmbedFn,                 // required for semantic cache
@@ -479,7 +479,7 @@ The exact-match cache returns identical requests (same model + same messages + s
 ### Imperial units
 
 ```typescript
-const ai = new ResourceAwareAI({ unitSystem: "imperial" });
+const ai = new SustainAI({ unitSystem: "imperial" });
 // metrics.unit            === "fl oz"
 // metrics.water_display   === water_ml / 29.5735
 // metrics.bottle_size_display === 16.91   (standard US bottle)
@@ -489,7 +489,7 @@ const ai = new ResourceAwareAI({ unitSystem: "imperial" });
 
 ## API Reference
 
-### `new ResourceAwareAI(config?)`
+### `new SustainAI(config?)`
 
 Returns a client. All config fields are optional (see [Configuration](#configuration)).
 
@@ -628,7 +628,7 @@ import {
   generateInlineFootnote,
   mlToDisplay,
   mlToBottles,
-} from "resource-aware-ai";
+} from "sustain-ai";
 ```
 
 ---
@@ -757,9 +757,9 @@ Real-world chat apps see exact-match hit rates of **5–10%**. Semantic caching 
 ### Configuration
 
 ```typescript
-import { ResourceAwareAI } from "resource-aware-ai";
+import { SustainAI } from "sustain-ai";
 
-const ai = new ResourceAwareAI({
+const ai = new SustainAI({
   enableSemanticCache:    true,    // default false
   embedder:               myEmbedder,            // required
   semanticCacheThreshold: 0.95,    // cosine cutoff, default 0.95
@@ -777,7 +777,7 @@ The SDK ships **without** a default embedder so it stays dependency-free. You su
 import OpenAI from "openai";
 const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-const ai = new ResourceAwareAI({
+const ai = new SustainAI({
   enableSemanticCache: true,
   embedder: async (text) => {
     const r = await openai.embeddings.create({
@@ -795,7 +795,7 @@ const ai = new ResourceAwareAI({
 import { pipeline } from "@xenova/transformers";
 const embed = await pipeline("feature-extraction", "Xenova/all-MiniLM-L6-v2");
 
-const ai = new ResourceAwareAI({
+const ai = new SustainAI({
   enableSemanticCache: true,
   embedder: async (text) => {
     const out = await embed(text, { pooling: "mean", normalize: true });
@@ -824,12 +824,12 @@ If you're not sure, start at `0.95` and watch `metrics.cache_similarity` on the 
 - **Eviction is FIFO** once `semanticCacheMaxSize` is reached.
 - **Best-of-N matching.** The SDK returns the *most* similar entry above threshold, not just the first.
 - **`clearCache()` flushes both** the exact and semantic caches.
-- **Provider-scoped storage.** The exact-match cache key includes the provider name; the semantic cache currently does not, so cross-provider semantic hits are possible (treat embeddings as the answer-fingerprint, not the provider-fingerprint). If you need strict provider isolation in the semantic layer, run a separate `ResourceAwareAI` instance per provider.
+- **Provider-scoped storage.** The exact-match cache key includes the provider name; the semantic cache currently does not, so cross-provider semantic hits are possible (treat embeddings as the answer-fingerprint, not the provider-fingerprint). If you need strict provider isolation in the semantic layer, run a separate `SustainAI` instance per provider.
 
 ### Limitations
 
 - Embedding calls have their own (small) cost. The SDK does not currently meter the embedder itself — you can call `ai.chat()` with your embedding model if you want to count that energy too.
-- Linear-scan lookup is O(N) per request. Fine up to ~10k entries; beyond that, plug in a vector DB (Qdrant, pgvector, Pinecone) and use the semantic cache primitives directly: `import { SemanticCache, cosineSimilarity } from "resource-aware-ai"`.
+- Linear-scan lookup is O(N) per request. Fine up to ~10k entries; beyond that, plug in a vector DB (Qdrant, pgvector, Pinecone) and use the semantic cache primitives directly: `import { SemanticCache, cosineSimilarity } from "sustain-ai"`.
 
 ---
 
@@ -842,9 +842,9 @@ Most apps wire every request to the same model — usually the largest one. But 
 ### Quick example
 
 ```typescript
-import { ResourceAwareAI } from "resource-aware-ai";
+import { SustainAI } from "sustain-ai";
 
-const ai = new ResourceAwareAI();
+const ai = new SustainAI();
 
 const res = await ai.chatWithRouting({
   messages: [{ role: "user", content: "What's the capital of France?" }],
@@ -881,7 +881,7 @@ Starting score is `1.0`; final score is clamped to `[0, 1]`. Empty responses sco
 Use logprobs, a self-check call, structured output validation, or anything else you want:
 
 ```typescript
-import { defaultConfidenceFn, type ConfidenceFn } from "resource-aware-ai";
+import { defaultConfidenceFn, type ConfidenceFn } from "sustain-ai";
 
 const myConfidence: ConfidenceFn = (response, ctx) => {
   // Example: combine the heuristic with a structured-output check
@@ -945,7 +945,7 @@ A healthy router shows `tier_usage[0]` substantially larger than later tiers —
 
 - **Each tier attempt counts as a real request** in the session totals — `total_requests` reflects underlying provider work, not logical routed calls. Routed-call accounting lives in `session.router.routed_requests`.
 - **Constraint enforcement** (`max_water_ml`, `max_co2_g`, `max_kwh`) applies to *each tier attempt independently*. If a small tier passes but its escalation would exceed the budget, the escalation throws — caller decides what to do.
-- **Empty `tiers` throws** a `ResourceAwareAIError` with code `CONFIG_ERROR`.
+- **Empty `tiers` throws** a `SustainAIError` with code `CONFIG_ERROR`.
 - **No tier crosses the threshold?** The largest tier's response is returned anyway — better to ship the best available answer than nothing.
 
 ### When NOT to use routing
@@ -1046,7 +1046,7 @@ PRs welcome — please open an issue first for non-trivial changes. The SDK is i
 
 ```bash
 git clone <repo>
-cd resource-aware-ai
+cd sustain-ai
 pnpm install
 pnpm test
 pnpm typecheck

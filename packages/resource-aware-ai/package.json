@@ -1,7 +1,7 @@
 {
-  "name": "resource-aware-ai",
+  "name": "sustain-ai",
   "version": "1.0.0",
-  "description": "Provider-agnostic TypeScript SDK that wraps any LLM call (OpenAI, Anthropic, Gemini, Mistral, Cohere, Ollama, custom HTTP) and returns energy + water usage metrics with a human-readable sustainability footnote.",
+  "description": "Provider-agnostic TypeScript SDK that wraps any LLM call (OpenAI, Anthropic, Gemini, Mistral, Cohere, Ollama, custom HTTP) and returns energy + water + carbon usage metrics with a human-readable sustainability footnote.",
   "keywords": [
     "ai",
     "llm",
@@ -17,19 +17,19 @@
     "mistral",
     "cohere",
     "ollama",
-    "resource-aware",
+    "sustain",
     "metrics",
     "observability"
   ],
-  "author": "resource-aware-ai contributors",
+  "author": "SustAIn contributors",
   "license": "MIT",
-  "homepage": "https://github.com/resource-aware-ai/resource-aware-ai#readme",
+  "homepage": "https://github.com/adl5423/sustain-ai#readme",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/resource-aware-ai/resource-aware-ai.git"
+    "url": "git+https://github.com/adl5423/sustain-ai.git"
   },
   "bugs": {
-    "url": "https://github.com/resource-aware-ai/resource-aware-ai/issues"
+    "url": "https://github.com/adl5423/sustain-ai/issues"
   },
   "engines": {
     "node": ">=18"

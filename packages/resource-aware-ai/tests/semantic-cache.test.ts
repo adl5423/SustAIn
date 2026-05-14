@@ -4,7 +4,7 @@ import {
   cosineSimilarity,
   canonicalizeMessages,
 } from "../src/core/semantic-cache.js";
-import { ResourceAwareAI } from "../src/index.js";
+import { SustainAI } from "../src/index.js";
 import type { ProviderAdapter, ChatResponse } from "../src/index.js";
 import { vi } from "vitest";
 
@@ -147,7 +147,7 @@ describe("SemanticCache", () => {
   });
 });
 
-describe("ResourceAwareAI — semantic cache integration", () => {
+describe("SustainAI — semantic cache integration", () => {
   function makeMock(text = "hello"): ProviderAdapter {
     return {
       async generate() {
@@ -167,7 +167,7 @@ describe("ResourceAwareAI — semantic cache integration", () => {
 
   it("serves a similar prompt from the semantic cache (above threshold)", async () => {
     const generateFn = vi.fn().mockResolvedValue({ text: "It is sunny.", usage: { total_tokens: 50 } });
-    const ai = new ResourceAwareAI({
+    const ai = new SustainAI({
       enableCache: true,
       enableSemanticCache: true,
       embedder: topicEmbedder,
@@ -197,7 +197,7 @@ describe("ResourceAwareAI — semantic cache integration", () => {
 
   it("does NOT serve from semantic cache when below threshold", async () => {
     const generateFn = vi.fn().mockResolvedValue({ text: "Hi", usage: { total_tokens: 30 } });
-    const ai = new ResourceAwareAI({
+    const ai = new SustainAI({
       enableCache: true,
       enableSemanticCache: true,
       embedder: topicEmbedder,
@@ -216,7 +216,7 @@ describe("ResourceAwareAI — semantic cache integration", () => {
   });
 
   it("counts exact hits and semantic hits separately", async () => {
-    const ai = new ResourceAwareAI({
+    const ai = new SustainAI({
       enableCache: true,
       enableSemanticCache: true,
       embedder: topicEmbedder,
@@ -238,7 +238,7 @@ describe("ResourceAwareAI — semantic cache integration", () => {
 
   it("survives an embedder that throws", async () => {
     const generateFn = vi.fn().mockResolvedValue({ text: "ok", usage: { total_tokens: 10 } });
-    const ai = new ResourceAwareAI({
+    const ai = new SustainAI({
       enableCache: false,
       enableSemanticCache: true,
       embedder: () => {
@@ -258,7 +258,7 @@ describe("ResourceAwareAI — semantic cache integration", () => {
   });
 
   it("does nothing semantic when no embedder is configured", async () => {
-    const ai = new ResourceAwareAI({ enableCache: true, enableSemanticCache: true });
+    const ai = new SustainAI({ enableCache: true, enableSemanticCache: true });
     ai.registerProvider("mock", makeMock());
     const res = await ai.chat({
       model: "gpt-4o",
@@ -270,7 +270,7 @@ describe("ResourceAwareAI — semantic cache integration", () => {
   });
 
   it("clearCache also clears the semantic cache", async () => {
-    const ai = new ResourceAwareAI({
+    const ai = new SustainAI({
       enableCache: true,
       enableSemanticCache: true,
       embedder: topicEmbedder,

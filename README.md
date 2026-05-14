@@ -1,8 +1,8 @@
-# resource-aware-ai
+# SustAIn
 
 > A provider-agnostic TypeScript SDK that wraps any LLM call and returns **energy + water + carbon metrics** with a human-readable sustainability footnote.
 
-[![npm version](https://img.shields.io/npm/v/resource-aware-ai.svg)](https://www.npmjs.com/package/resource-aware-ai)
+[![npm version](https://img.shields.io/npm/v/sustain-ai.svg)](https://www.npmjs.com/package/sustain-ai)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](https://opensource.org/licenses/MIT)
 [![TypeScript](https://img.shields.io/badge/TypeScript-Ready-blue.svg)](https://www.typescriptlang.org/)
 
@@ -14,16 +14,16 @@ Wrap any call to OpenAI, Anthropic, Gemini, Mistral, Cohere, Ollama, or any cust
 
 The SDK lives in [`packages/resource-aware-ai`](./packages/resource-aware-ai).
 
-👉 **[Full documentation →](./packages/resource-aware-ai/README.md)**
+**[Full documentation →](./packages/resource-aware-ai/README.md)**
 
 ---
 
 ## Quick look
 
 ```typescript
-import { ResourceAwareAI } from "resource-aware-ai";
+import { SustainAI } from "sustain-ai";
 
-const ai = new ResourceAwareAI({ provider: "openai", model: "gpt-4o-mini" });
+const ai = new SustainAI({ provider: "openai", model: "gpt-4o-mini" });
 
 const { output, metrics, footnote } = await ai.chat({
   messages: [{ role: "user", content: "Explain photosynthesis in one sentence." }],
@@ -56,9 +56,9 @@ console.log(footnote);
 ## Installation
 
 ```bash
-npm install resource-aware-ai
+npm install sustain-ai
 # or
-pnpm add resource-aware-ai
+pnpm add sustain-ai
 ```
 
 ---
@@ -67,7 +67,7 @@ pnpm add resource-aware-ai
 
 ```
 packages/
-  resource-aware-ai/    ← the SDK (published to npm)
+  resource-aware-ai/    ← the SDK (published to npm as sustain-ai)
     src/
       core/             ← estimator, calculator, cache, router, footnote
       providers/        ← one adapter per LLM provider
