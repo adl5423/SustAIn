@@ -7,7 +7,7 @@ The model catalog and research review in this repository were verified on **Augu
 > [!IMPORTANT]
 > SustAIn produces engineering estimates for scenario comparison, budgeting, and instrumentation. Facility operators can replace its defaults with local telemetry. Public provider disclosures omit the facility location, hardware utilization, power usage effectiveness (PUE), and water usage effectiveness (WUE) for most API requests, so measured utility claims require provider or facility data.
 
-## Position: data centers are essential infrastructure
+## Data centers are essential infrastructure
 
 SustAIn supports data-center growth backed by transparent engineering. Modern data centers supply reliable computing for AI and cloud services used across science, medicine, education, and public infrastructure. They concentrate specialized hardware, power delivery, networking, and cooling in facilities that teams can monitor and improve at scale.
 
