@@ -7,6 +7,20 @@ The model catalog and research review in this repository were verified on **Augu
 > [!IMPORTANT]
 > SustAIn is an estimator, not a wattmeter or a provider telemetry service. Cloud providers generally do not publish model-specific facility location, hardware utilization, power usage effectiveness (PUE), or water usage effectiveness (WUE) for each API request. Results from the normalized model table below are useful for scenario comparison, budgeting, and instrumentation. They are not measured water bills for a named model.
 
+## Live API demonstration
+
+[Watch the 69-second live consumer-service demonstration](docs/media/sustain-live-api-demo.mov). The recording starts in a fresh Node project with no `node_modules` directory or lockfile. It installs `sustain-ai@2.0.0` and `openai@7.5.0`, starts an HTTP API on `127.0.0.1`, and sends a request through SustAIn to OpenAI's Responses API using `gpt-5.6-sol`.
+
+The response includes OpenAI's provider-reported token counts and SustAIn's energy, direct-water, electricity-water, and combined-water estimates. The server sets `store: false`, binds to localhost, and labels the result as an operational estimate based on reference assumptions. Before capture, the shell loaded `OPENAI_API_KEY` from a gitignored local file. The recording never prints the credential.
+
+The npm registry had no public `sustain-ai` package when we recorded the demonstration on August 22, 2026. The install uses the exact tarball that `npm pack` generated from this checkout. npm distributes the same archive format after publication.
+
+Run the credential-free deterministic SDK walkthrough:
+
+```bash
+pnpm --filter sustain-ai run demo
+```
+
 ## What changed in 2.0
 
 - Replaced fixed milliliters-per-token claims with an energy-first calculation tied to official 2025 and 2026 inference measurements.

@@ -1,16 +1,16 @@
-import { ResourceAwareAI } from "./src/index.js";
+import { SustainAI } from "./src/index.js";
 
 const USAGE = `
 Usage:
-  pnpm --filter resource-aware-ai run test:openai -- [model] [provider] "your prompt" [--imperial]
+  pnpm --filter sustain-ai run test:openai -- [model] [provider] "your prompt" [--imperial]
 
 Examples:
-  pnpm --filter resource-aware-ai run test:openai -- gpt-4o-mini openai "What is the water cycle?"
-  pnpm --filter resource-aware-ai run test:openai -- gpt-4o openai "Explain black holes" --imperial
-  pnpm --filter resource-aware-ai run test:openai -- gemini-2.0-flash gemini "Write a haiku about rain" --imperial
+  pnpm --filter sustain-ai run test:openai -- gpt-5.6-terra openai "What is the water cycle?"
+  pnpm --filter sustain-ai run test:openai -- gpt-5.6-sol openai "Explain black holes" --imperial
+  pnpm --filter sustain-ai run test:openai -- gemini-3.7-flash gemini "Write a haiku about rain" --imperial
 
 Defaults (if no args given):
-  model:    gpt-4o-mini
+  model:    gpt-5.6-terra
   provider: openai
   prompt:   "What is the water cycle? One sentence."
   units:    metric (ml)
@@ -23,7 +23,7 @@ const positional = rawArgs.filter((a) => a !== "--imperial");
 const [argModel, argProvider, ...rest] = positional;
 const prompt = rest.join(" ");
 
-const model = argModel || "gpt-4o-mini";
+const model = argModel || "gpt-5.6-terra";
 const provider = argProvider || "openai";
 const message = prompt || "What is the water cycle? One sentence.";
 
@@ -54,7 +54,7 @@ if (requiredKey && !process.env[requiredKey]) {
   console.log(`Units:    ${imperial ? "imperial (fl oz)" : "metric (ml)"}`);
   console.log(`Prompt:   "${message}"\n`);
 
-  const ai = new ResourceAwareAI({
+  const ai = new SustainAI({
     unitSystem: imperial ? "imperial" : "metric",
   });
 
