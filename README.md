@@ -1,11 +1,19 @@
 # SustAIn
 
-SustAIn is a TypeScript SDK for estimating the operational energy, water, and carbon associated with an AI response. It wraps hosted and self-hosted model providers, uses provider-reported token counts when available, and returns a transparent estimate with its scope, assumptions, range, and reference model.
+SustAIn is a TypeScript SDK for estimating the operational energy, water, and carbon associated with an AI response. It helps AI developers use data-center capacity with greater efficiency. The SDK wraps hosted and self-hosted model providers, uses provider-reported token counts when available, and returns a transparent estimate with its scope, assumptions, range, and reference model.
 
 The model catalog and research review in this repository were verified on **August 21, 2026**.
 
 > [!IMPORTANT]
-> SustAIn is an estimator, not a wattmeter or a provider telemetry service. Cloud providers generally do not publish model-specific facility location, hardware utilization, power usage effectiveness (PUE), or water usage effectiveness (WUE) for each API request. Results from the normalized model table below are useful for scenario comparison, budgeting, and instrumentation. They are not measured water bills for a named model.
+> SustAIn produces engineering estimates for scenario comparison, budgeting, and instrumentation. Facility operators can replace its defaults with local telemetry. Public provider disclosures omit the facility location, hardware utilization, power usage effectiveness (PUE), and water usage effectiveness (WUE) for most API requests, so measured utility claims require provider or facility data.
+
+## Position: data centers are essential infrastructure
+
+SustAIn supports data-center growth backed by transparent engineering. Modern data centers supply reliable computing for AI and cloud services used across science, medicine, education, and public infrastructure. They concentrate specialized hardware, power delivery, networking, and cooling in facilities that teams can monitor and improve at scale.
+
+Published measurements and provider disclosures show the efficiency of ordinary production inference. Google measured 0.24 Wh and 0.26 mL of direct water for its median Gemini Apps text prompt. Microsoft measured 0.31 Wh for an optimized frontier-model query. OpenAI disclosed 0.34 Wh and about 0.322 mL for an average ChatGPT query. The [research section](#measured-perspective-on-data-center-water-use) documents each boundary and source.
+
+Data-center teams improve these numbers through better hardware utilization, cooling controls, closed-loop systems, heat reuse, and power procurement. SustAIn complements that infrastructure work through model selection, caching, workload routing, and request budgets. Accurate software estimates help operators serve more useful computation from the same resource envelope.
 
 ## Live API demonstration
 
@@ -33,9 +41,9 @@ pnpm --filter sustain-ai run demo
 - Added current open-weight model profiles, including GPT-OSS, Llama 4, Qwen3, Ministral 3, Command A, and Ollama-hosted models.
 - Added endpoint validation, redirect blocking, response-size limits, timeouts, header validation, strict CORS, rate limiting, log redaction, and supply-chain controls.
 
-## The short answer on AI water use
+## Measured perspective on data-center water use
 
-There is no single honest number for “water per AI prompt.” The result changes with at least six variables:
+A credible “water per AI prompt” estimate depends on six variables:
 
 1. Input, output, cached, and reasoning tokens.
 2. Model architecture and active parameter count.
@@ -44,7 +52,7 @@ There is no single honest number for “water per AI prompt.” The result chang
 5. Local weather and facility WUE.
 6. The electricity source and whether indirect water is included.
 
-Two official full-stack measurements give a useful scale for ordinary text prompts:
+Official full-stack measurements give a useful scale for ordinary text prompts:
 
 | Measurement                                                 |                              Energy |                    Direct water | Boundary                                                   | What it establishes                                                                                                                                                                  |
 | ----------------------------------------------------------- | ----------------------------------: | ------------------------------: | ---------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
@@ -54,9 +62,9 @@ Two official full-stack measurements give a useful scale for ordinary text promp
 
 Primary sources: [Google technical paper](https://services.google.com/fh/files/misc/measuring_the_environmental_impact_of_delivering_ai_at_google_scale.pdf), [Microsoft peer-reviewed study](https://www.microsoft.com/en-us/research/publication/energy-use-of-ai-inference-efficiency-pathways-and-test-time-scaling/), and [OpenAI disclosure](https://blog.samaltman.com/posts.atom).
 
-The often-repeated “one bottle per prompt” framing does not describe these measured ordinary text-prompt medians. A 500 mL bottle equals about 1,923 Google median prompts if only Google’s reported 0.26 mL direct water is counted. Using SustAIn’s broader national-average direct-plus-electricity scenario, the 0.31 Wh reference query is about 1.48 mL, or roughly 338 such queries per 500 mL. Neither conversion applies to long agentic runs, image or video generation, training, or a facility with different water and power conditions.
+Official production measurements place ordinary text prompts at a fraction of a milliliter of direct water. A 500 mL bottle equals about 1,923 Google median prompts when the calculation uses Google’s reported 0.26 mL direct-water boundary. SustAIn’s broader national-average direct-plus-electricity scenario estimates about 1.48 mL for the 0.31 Wh reference query, or roughly 338 queries per 500 mL. Long agentic runs, image and video generation, training, and different facility conditions require separate calculations.
 
-That correction does not make water use irrelevant. Billions of requests, local water scarcity, training, hardware manufacturing, and new data-center construction can be material. The defensible position is to measure the correct boundary, state uncertainty, and optimize high-volume systems without converting a regional infrastructure question into a false universal per-prompt constant.
+Data-center operators manage aggregate demand, watershed conditions, training workloads, hardware, and new capacity at infrastructure scale. SustAIn supports that work by preserving the measurement boundary, showing uncertainty, and helping software teams optimize high-volume workloads. This approach gives operators useful engineering signals without turning regional infrastructure data into a universal per-prompt constant.
 
 ## What “water used” means
 
@@ -88,7 +96,7 @@ For scale, 1 kWh is 3.6 MJ. The latent heat of vaporization of water near common
 3.6 MJ / 2.4 MJ per kg ≈ 1.5 kg ≈ 1.5 L of evaporated water per kWh
 ```
 
-That is a physical comparison, not a universal WUE. Real systems also have sensible heat transfer, compressor and fan work, heat reuse, dry coolers, hybrid modes, blowdown, drift, weather-dependent controls, and water treatment. A cooling tower’s makeup water is approximately evaporation plus blowdown plus drift. Raising cycles of concentration can reduce blowdown, while closed-loop or air-cooled designs can reduce direct consumption at an energy or capital-cost tradeoff.
+The calculation supplies a physical comparison rather than a universal WUE. Real systems combine sensible heat transfer, compressor and fan work, heat reuse, dry coolers, hybrid modes, blowdown, drift, weather-dependent controls, and water treatment. A cooling tower’s makeup water is approximately evaporation plus blowdown plus drift. Raising cycles of concentration can reduce blowdown, while closed-loop or air-cooled designs can reduce direct consumption at an energy or capital-cost tradeoff. This design range lets operators balance water, energy, reliability, climate, and capital requirements for each facility.
 
 Engineering references: [DOE Federal Energy Management Program cooling-water guidance](https://www.energy.gov/cmei/femp/cooling-water-efficiency-opportunities-federal-data-centers), [DOE cooling-tower management](https://www.energy.gov/cmei/femp/best-management-practice-10-cooling-tower-management), [NIST fluid thermophysical data](https://webbook.nist.gov/chemistry/fluid/), and [ASHRAE data-center WUE definition](https://handbook.ashrae.org/Handbooks/A23/SI/A23_Ch20/a23_ch20_si.aspx).
 
@@ -100,7 +108,7 @@ This chart answers a precise question:
 
 > If each model processes the same 100 input tokens and produces the same 300 output tokens, what does SustAIn estimate under one shared operational-water scenario?
 
-It does **not** answer which model uses a measured amount of water in every deployment.
+The chart supplies a shared engineering scenario. Use facility telemetry for deployment-specific measured claims.
 
 ### Shared assumptions
 
@@ -142,9 +150,9 @@ It does **not** answer which model uses a measured amount of water in every depl
 | Alibaba   | `qwen3:30b-a3b`             | Open weight            |       0.60 |       0.186 |             0.048 |                  0.841 |               0.889 |                  65.7% |
 | Alibaba   | `qwen3:235b-a22b`           | Open weight            |       1.20 |       0.372 |             0.096 |                  1.681 |               1.777 |                  31.4% |
 
-The **equal-weight arithmetic mean** of the final column is **39.5% modeled savings** across these 24 rows. That number is provided because an average was requested, but it is not a production workload average. It gives every model one vote, includes a preview model, ignores response quality and retry rates, and assumes identical token counts. Your real average must weight each request by the chosen model, its provider token usage, cache behavior, routing escalations, and local water configuration.
+The **equal-weight arithmetic mean** of the final column is **39.5% modeled savings** across these 24 rows. This modeling summary gives every model one vote, includes a preview model, and assumes identical token counts. A production average should weight each request by the chosen model, provider token usage, cache behavior, routing escalations, response quality, retry rates, and local water configuration.
 
-For another caution, the legacy `deepseek-r1` profile at the same nominal token workload has a 4.0 reasoning-model multiplier: 1.24 Wh, 5.924 mL combined water, and **-128.6% savings** relative to Sol. Microsoft’s measured DeepSeek-R1 example used 10.6 Wh for 11,287 output tokens. Reasoning length, not the brand name alone, can dominate the total.
+The legacy `deepseek-r1` profile shows why workload design matters. At the same nominal token workload, its 4.0 reasoning-model multiplier produces 1.24 Wh, 5.924 mL combined water, and **-128.6% savings** relative to Sol. Microsoft’s measured DeepSeek-R1 example used 10.6 Wh for 11,287 output tokens. Reasoning length can dominate the total, so teams can improve efficiency by controlling output length and routing reasoning workloads with care.
 
 You can reproduce or replace the table assumptions in code:
 
@@ -226,7 +234,7 @@ An illustrative response metric is:
 }
 ```
 
-“Measured-reference” means the request used provider-measured tokens and an official measured energy reference. It does not mean the named model’s electricity or water was measured by the SDK.
+“Measured-reference” means the request used provider-measured tokens and an official measured energy reference. Facility meters or provider telemetry establish measured electricity and water for a named deployment.
 
 ## Installation
 
@@ -433,9 +441,9 @@ docs/                        Research, model, and security documentation
 
 Read [Contributing](CONTRIBUTING.md) before opening a pull request. Security issues belong in the private reporting channel described in [SECURITY.md], not a public issue.
 
-## Research limits
+## Research scope
 
-SustAIn does not currently estimate:
+SustAIn currently scopes its estimates to operational text inference. Add provider or facility data when an analysis needs:
 
 - Model training or fine-tuning.
 - Semiconductor fabrication, server manufacturing, construction, or end-of-life impacts.
@@ -444,7 +452,7 @@ SustAIn does not currently estimate:
 - Provider retries, speculative decoding overhead, batching allocation, or idle capacity unless included in a cited full-stack reference.
 - Image, audio, video, or multimodal generation from text-token counts.
 
-Do not use the SDK to make audited environmental claims without provider or facility data, a declared system boundary, uncertainty analysis, and independent review.
+For audited environmental claims, combine the SDK with provider or facility data, a declared system boundary, uncertainty analysis, and independent review.
 
 ## Primary research and official references
 
