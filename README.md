@@ -216,7 +216,7 @@ An illustrative response metric is:
 
 ## Installation
 
-Requirements: Node.js 20.19 or newer.
+Requirements: Node.js 22.13 or newer.
 
 ```bash
 pnpm add sustain-ai

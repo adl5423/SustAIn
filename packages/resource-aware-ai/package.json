@@ -33,7 +33,7 @@
     "url": "https://github.com/adl5423/SustAIn/issues"
   },
   "engines": {
-    "node": ">=20.19"
+    "node": ">=22.13"
   },
   "sideEffects": false,
   "main": "./dist/cjs/index.js",

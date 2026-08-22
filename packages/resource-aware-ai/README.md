@@ -8,7 +8,7 @@ The full research explanation, 2026 model chart, thermodynamic derivation, and s
 
 ## Requirements
 
-- Node.js 20.19 or newer
+- Node.js 22.13 or newer
 - ESM or CommonJS
 - TypeScript declarations included
 - Provider packages are optional peer dependencies

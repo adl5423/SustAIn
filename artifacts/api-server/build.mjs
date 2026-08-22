@@ -1,12 +1,7 @@
-import { createRequire } from "node:module";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { build as esbuild } from "esbuild";
-import esbuildPluginPino from "esbuild-plugin-pino";
 import { rm } from "node:fs/promises";
-
-// Plugins (e.g. 'esbuild-plugin-pino') may use `require` to resolve dependencies
-globalThis.require = createRequire(import.meta.url);
 
 const artifactDir = path.dirname(fileURLToPath(import.meta.url));
 
@@ -97,12 +92,12 @@ async function buildAll() {
       "puppeteer",
       "puppeteer-core",
       "electron",
+      "pino",
+      "pino-http",
+      "pino-pretty",
+      "thread-stream",
     ],
     sourcemap: "linked",
-    plugins: [
-      // Bundle Pino's worker entry points with the server artifact.
-      esbuildPluginPino({ transports: ["pino-pretty"] }),
-    ],
     // Restore CommonJS globals required by dependencies in the ESM bundle.
     banner: {
       js: `import { createRequire as __bannerCrReq } from 'node:module';

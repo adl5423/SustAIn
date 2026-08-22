@@ -4,7 +4,7 @@
 
 Requirements:
 
-- Node.js 20.19 or newer.
+- Node.js 22.13 or newer.
 - Corepack.
 - pnpm version declared in the root `package.json`.
 

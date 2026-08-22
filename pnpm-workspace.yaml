@@ -40,7 +40,6 @@ catalog:
 
 overrides:
   "@esbuild-kit/esm-loader": npm:tsx@^4.23.12
-  esbuild-plugin-pino>esbuild: 0.25.8
   fast-uri: 3.1.5
   form-data: 4.0.6
   typescript: 5.9.3

@@ -114,9 +114,9 @@ Files in the repository cannot enforce hosted settings. Configure these controls
 - Dismiss stale approvals when new commits arrive.
 - Require approval of the most recent push.
 - Require all conversations resolved.
-- Require `CI`, `Dependency review`, `CodeQL`, and `Secret scan` checks.
+- Require `Node 22.x`, `Node 24.x`, `Dependency review`, `CodeQL`, and `Secret scan` checks.
 - Block force pushes and branch deletion.
-- Apply rules to administrators or narrowly document bypass roles.
+- Keep the administrator bypass only while a single maintainer must merge their own changes. Remove it when a second trusted reviewer can approve maintainer pull requests.
 - Require signed commits when the contributor workflow supports them.
 - Use merge queue for high-concurrency maintenance.
 
