@@ -1,7 +1,7 @@
 // Export your models here. Add one export per file
 // export * from "./posts";
 //
-// Each model/table should ideally be split into different files.
+// Split each model or table into its own file as the schema grows.
 // Each model/table should define a Drizzle table, insert schema, and types:
 //
 //   import { pgTable, text, serial } from "drizzle-orm/pg-core";
@@ -17,4 +17,4 @@
 //   export type InsertPost = z.infer<typeof insertPostSchema>;
 //   export type Post = typeof postsTable.$inferSelect;
 
-export {}
+export {};

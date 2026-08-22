@@ -10,7 +10,9 @@ import type { ProviderAdapter } from "../src/index.js";
 describe("defaultConfidenceFn", () => {
   it("returns 1.0 for a normal confident answer", () => {
     expect(
-      defaultConfidenceFn({ text: "Photosynthesis is the process by which plants convert sunlight into energy." }),
+      defaultConfidenceFn({
+        text: "Photosynthesis is the process by which plants convert sunlight into energy.",
+      }),
     ).toBeCloseTo(1, 5);
   });
 
@@ -19,18 +21,22 @@ describe("defaultConfidenceFn", () => {
     expect(defaultConfidenceFn({ text: "    " })).toBe(0);
   });
 
-  it("penalises very short responses", () => {
+  it("penalises responses below the length threshold", () => {
     expect(defaultConfidenceFn({ text: "Sure!" })).toBeLessThan(1);
     expect(defaultConfidenceFn({ text: "Sure!" })).toBeCloseTo(0.7, 5);
   });
 
   it("penalises 'I don't know' style answers below threshold", () => {
-    const c = defaultConfidenceFn({ text: "I don't know the answer to that — could you clarify?" });
+    const c = defaultConfidenceFn({
+      text: "I don't know the answer to that. Could you clarify?",
+    });
     expect(c).toBeLessThan(DEFAULT_CONFIDENCE_THRESHOLD);
   });
 
   it("penalises refusals heavily", () => {
-    const c = defaultConfidenceFn({ text: "I'm sorry, but I cannot help with that request." });
+    const c = defaultConfidenceFn({
+      text: "I'm sorry, but I cannot help with that request.",
+    });
     expect(c).toBeLessThan(0.5);
   });
 
@@ -49,8 +55,12 @@ describe("defaultConfidenceFn", () => {
   });
 
   it("LOW_CONFIDENCE_PATTERNS match expected phrases", () => {
-    expect(LOW_CONFIDENCE_PATTERNS.some((re) => re.test("I don't know"))).toBe(true);
-    expect(LOW_CONFIDENCE_PATTERNS.some((re) => re.test("I am not sure"))).toBe(true);
+    expect(LOW_CONFIDENCE_PATTERNS.some((re) => re.test("I don't know"))).toBe(
+      true,
+    );
+    expect(LOW_CONFIDENCE_PATTERNS.some((re) => re.test("I am not sure"))).toBe(
+      true,
+    );
   });
 });
 
@@ -65,7 +75,10 @@ describe("SustainAI.chatWithRouting", () => {
 
   it("uses tier 0 when its confidence is high enough", async () => {
     const ai = new SustainAI({ enableCache: false });
-    ai.registerProvider("small", provider("Photosynthesis converts sunlight into energy via chlorophyll."));
+    ai.registerProvider(
+      "small",
+      provider("Photosynthesis converts sunlight into energy via chlorophyll."),
+    );
     ai.registerProvider("large", provider("This should not be called"));
 
     const res = await ai.chatWithRouting({
@@ -158,15 +171,18 @@ describe("SustainAI.chatWithRouting", () => {
 
   it("computes positive savings vs largest tier when it stops at tier 0", async () => {
     const ai = new SustainAI({ enableCache: false });
-    ai.registerProvider("small", provider("Confident detailed answer about topic.", 100));
+    ai.registerProvider(
+      "small",
+      provider("Confident detailed answer about topic.", 100),
+    );
     ai.registerProvider("large", provider("unused"));
 
     const res = await ai.chatWithRouting({
       messages: [{ role: "user", content: "Q" }],
       router: {
         tiers: [
-          { model: "gpt-4o-mini", provider: "small" },   // small class
-          { model: "gpt-4o", provider: "large" },        // large class
+          { model: "gpt-4o-mini", provider: "small" }, // small class
+          { model: "gpt-4o", provider: "large" }, // large class
         ],
       },
     });
@@ -186,12 +202,50 @@ describe("SustainAI.chatWithRouting", () => {
       { model: "gpt-4o", provider: "large" },
     ];
 
-    await ai.chatWithRouting({ messages: [{ role: "user", content: "a" }], router: { tiers } });
-    await ai.chatWithRouting({ messages: [{ role: "user", content: "b" }], router: { tiers } });
+    await ai.chatWithRouting({
+      messages: [{ role: "user", content: "a" }],
+      router: { tiers },
+    });
+    await ai.chatWithRouting({
+      messages: [{ role: "user", content: "b" }],
+      router: { tiers },
+    });
 
     const stats = ai.getStats();
     expect(stats.router?.routed_requests).toBe(2);
     expect(stats.router?.tier_usage[0]).toBe(2);
     expect(stats.router?.escalations).toBe(0);
+  });
+
+  it("applies resource constraints across all attempted tiers", async () => {
+    const small = vi.fn().mockResolvedValue({
+      text: "I don't know",
+      usage: { prompt_tokens: 25, completion_tokens: 25, total_tokens: 50 },
+    });
+    const large = vi.fn().mockResolvedValue({
+      text: "This tier should not run.",
+      usage: { prompt_tokens: 25, completion_tokens: 25, total_tokens: 50 },
+    });
+    const ai = new SustainAI({
+      enableCache: false,
+      customEstimator: () => 0.001,
+    });
+    ai.registerProvider("small", { generate: small });
+    ai.registerProvider("large", { generate: large });
+
+    await expect(
+      ai.chatWithRouting({
+        messages: [{ role: "user", content: "Question" }],
+        constraints: { max_water_ml: 6 },
+        router: {
+          tiers: [
+            { model: "small-model", provider: "small" },
+            { model: "large-model", provider: "large" },
+          ],
+        },
+      }),
+    ).rejects.toBeInstanceOf(SustainAIError);
+    expect(small).toHaveBeenCalledOnce();
+    expect(large).not.toHaveBeenCalled();
   });
 });

@@ -1,5 +1,12 @@
 import { describe, it, expect } from "vitest";
-import { calculateWater, calculateBaseline, calculateSavings, computeWaterMetrics } from "../src/core/calculator.js";
+import {
+  calculateWater,
+  calculateBaseline,
+  calculateSavings,
+  computeWaterMetrics,
+  computeOperationalWater,
+  DEFAULT_WATER_ACCOUNTING,
+} from "../src/core/calculator.js";
 
 describe("calculateWater", () => {
   it("multiplies kwh by regionFactor", () => {
@@ -43,5 +50,24 @@ describe("computeWaterMetrics", () => {
     expect(result.water_ml).toBeCloseTo(2.0, 5);
     expect(result.baseline_water_ml).toBeCloseTo(4.5, 5);
     expect(result.water_saved_percent).toBeCloseTo(55.55, 1);
+  });
+});
+
+describe("computeOperationalWater", () => {
+  it("separates direct cooling from electricity-generation water", () => {
+    const result = computeOperationalWater(0.00031, DEFAULT_WATER_ACCOUNTING);
+    expect(result.direct_water_ml).toBeCloseTo(0.079714, 6);
+    expect(result.electricity_water_ml).toBeCloseTo(1.4012, 6);
+    expect(result.water_ml).toBeCloseTo(1.480914, 6);
+  });
+
+  it("can report direct cooling only", () => {
+    const result = computeOperationalWater(0.00031, { scope: "direct" });
+    expect(result.water_ml).toBe(result.direct_water_ml);
+    expect(result.electricity_water_ml).toBeGreaterThan(0);
+  });
+
+  it("rejects impossible PUE values", () => {
+    expect(() => computeOperationalWater(0.00031, { pue: 0 })).toThrow(/pue/);
   });
 });

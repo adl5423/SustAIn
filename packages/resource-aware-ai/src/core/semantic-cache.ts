@@ -11,8 +11,8 @@ import type { ChatResponse, Message } from "../types.js";
  *   - either vector is empty,
  *   - either vector is all-zeros (undefined cosine).
  *
- * This is intentionally tolerant so a misconfigured embedder degrades to
- * "no semantic hits" instead of crashing the whole request path.
+ * Invalid embedder output returns zero similarity, which prevents a cache hit
+ * without failing the request path.
  */
 export function cosineSimilarity(a: number[], b: number[]): number {
   if (a.length === 0 || a.length !== b.length) return 0;
@@ -22,6 +22,7 @@ export function cosineSimilarity(a: number[], b: number[]): number {
   for (let i = 0; i < a.length; i++) {
     const ai = a[i]!;
     const bi = b[i]!;
+    if (!Number.isFinite(ai) || !Number.isFinite(bi)) return 0;
     dot += ai * bi;
     na += ai * ai;
     nb += bi * bi;
@@ -42,8 +43,10 @@ export function canonicalizeMessages(messages: Message[]): string {
 interface SemanticEntry {
   embedding: number[];
   response: ChatResponse;
-  /** Free-form provenance string — useful for debugging / introspection. */
+  /** Free-form provenance string used for debugging and inspection. */
   source: string;
+  /** Exact isolation boundary, such as tenant, provider, and model. */
+  scope: string;
 }
 
 export interface SemanticCacheHit {
@@ -53,14 +56,12 @@ export interface SemanticCacheHit {
 }
 
 /**
- * In-memory semantic cache. Stores `(embedding, response)` pairs and serves
- * a previously computed response when a new query's embedding is "close
- * enough" (cosine similarity ≥ threshold) to a stored one.
+ * In-memory semantic cache. Stores `(embedding, response)` pairs and returns a
+ * cached response when cosine similarity meets the configured threshold.
  *
  * Eviction is FIFO once `maxSize` entries are stored. Lookup is a linear
- * scan, which is fine for the typical few-hundred-to-few-thousand entry
- * caches this is designed for. For larger workloads, plug in your own
- * vector store via `findSimilar` / `add`.
+ * scan suited to caches with a few hundred or thousand entries. Larger
+ * workloads should provide a vector store through `findSimilar` and `add`.
  */
 export class SemanticCache {
   private readonly entries: SemanticEntry[] = [];
@@ -73,23 +74,42 @@ export class SemanticCache {
     this.maxSize = Math.floor(maxSize);
   }
 
-  add(embedding: number[], response: ChatResponse, source = ""): void {
+  add(
+    embedding: number[],
+    response: ChatResponse,
+    source = "",
+    scope = source,
+  ): void {
     if (embedding.length === 0) return;
     if (this.entries.length >= this.maxSize) this.entries.shift();
-    this.entries.push({ embedding, response, source });
+    this.entries.push({
+      embedding: [...embedding],
+      response: structuredClone(response),
+      source,
+      scope,
+    });
   }
 
   /**
    * Find the closest stored entry whose cosine similarity to `embedding`
    * meets or exceeds `threshold`. Returns `null` if nothing qualifies.
    */
-  findSimilar(embedding: number[], threshold: number): SemanticCacheHit | null {
+  findSimilar(
+    embedding: number[],
+    threshold: number,
+    scope?: string,
+  ): SemanticCacheHit | null {
     if (embedding.length === 0) return null;
     let best: SemanticCacheHit | null = null;
     for (const entry of this.entries) {
+      if (scope !== undefined && entry.scope !== scope) continue;
       const sim = cosineSimilarity(embedding, entry.embedding);
       if (sim >= threshold && (best === null || sim > best.similarity)) {
-        best = { response: entry.response, similarity: sim, source: entry.source };
+        best = {
+          response: structuredClone(entry.response),
+          similarity: sim,
+          source: entry.source,
+        };
       }
     }
     return best;

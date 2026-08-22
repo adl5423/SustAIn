@@ -1,122 +1,73 @@
 import type { ResourceMetrics } from "../types.js";
 
-function fmtN(n: number): string {
-  if (!isFinite(n)) return "0";
-  const abs = Math.abs(n);
-  if (abs >= 100) return n.toFixed(1);
-  if (abs >= 1) return n.toFixed(2);
-  if (abs >= 0.01) return n.toFixed(3);
-  return n.toFixed(4);
+function formatNumber(value: number): string {
+  if (!Number.isFinite(value)) return "0";
+  const absolute = Math.abs(value);
+  if (absolute >= 100) return value.toFixed(1);
+  if (absolute >= 1) return value.toFixed(2);
+  if (absolute >= 0.01) return value.toFixed(3);
+  return value.toFixed(4);
 }
 
-function fmtG(g: number): string {
-  if (g >= 1000) return `${(g / 1000).toFixed(2)} kg CO₂e`;
-  return `${fmtN(g)} g CO₂e`;
+function formatCarbon(grams: number): string {
+  if (grams >= 1000) return `${(grams / 1000).toFixed(2)} kg CO₂e`;
+  return `${formatNumber(grams)} g CO₂e`;
 }
 
 export function generateFootnote(metrics: ResourceMetrics): string {
-  const {
-    water_display,
-    baseline_display,
-    water_saved_display,
-    water_saved_percent,
-    unit,
-    energy_wh,
-    energy_kwh,
-    cache_hit,
-    bottles_saved,
-    bottles_saved_session,
-    bottle_size_display,
-    co2_g,
-    baseline_co2_g,
-    co2_saved_g,
-    co2_saved_percent,
-    region,
-    equivalents,
-    session,
-  } = metrics;
-
-  const energyDisplayWh = energy_wh > 0 ? energy_wh : energy_kwh * 1000;
-  const bottleLabel = `${fmtN(bottle_size_display)} ${unit} bottle`;
-
-  const sessionSentence =
-    bottles_saved_session >= 1
-      ? `You've saved the equivalent of ${fmtN(bottles_saved_session)} ${bottleLabel}s of water in this conversation so far.`
-      : `You've saved ${fmtN(bottles_saved_session)} of a ${bottleLabel} of water in this conversation so far.`;
-
-  const cacheSavingsLine =
-    session.cache_savings.requests > 0
-      ? `Cache savings (session): ${fmtN(session.cache_savings.water_ml)} ml water, ${fmtN(session.cache_savings.energy_wh)} Wh, ${fmtG(session.cache_savings.co2_g)} avoided across ${session.cache_savings.requests} hit${session.cache_savings.requests === 1 ? "" : "s"}.`
+  const bottleLabel = `${formatNumber(metrics.bottle_size_display)} ${metrics.unit} bottle`;
+  const cacheLine =
+    metrics.session.cache_savings.requests > 0
+      ? `Cache avoided ${formatNumber(metrics.session.cache_savings.water_ml)} ml water, ${formatNumber(metrics.session.cache_savings.energy_wh)} Wh, and ${formatCarbon(metrics.session.cache_savings.co2_g)} across ${metrics.session.cache_savings.requests} hit${metrics.session.cache_savings.requests === 1 ? "" : "s"}.`
       : "";
 
-  if (cache_hit) {
+  if (metrics.cache_hit) {
     const lines = [
-      `Served from cache — 0 ${unit} water, 0 Wh, 0 g CO₂e used (vs baseline ${fmtN(baseline_display)} ${unit} / ${fmtG(baseline_co2_g)}).`,
-      ``,
-      sessionSentence,
+      `Cache hit: model inference was skipped; estimated inference energy, water, and carbon are zero.`,
+      `Avoided reference impact: ${formatNumber(metrics.baseline_water_ml)} ${metrics.unit} and ${formatCarbon(metrics.baseline_co2_g)}.`,
     ];
-    if (cacheSavingsLine) lines.push(cacheSavingsLine);
+    if (cacheLine) lines.push(cacheLine);
     return lines.join("\n");
   }
 
-  const water_sign = water_saved_percent >= 0 ? "−" : "+";
-  const water_abs = Math.abs(water_saved_percent).toFixed(1);
-  const co2_sign = co2_saved_percent >= 0 ? "−" : "+";
-  const co2_abs = Math.abs(co2_saved_percent).toFixed(1);
-
-  const equivalentsLine =
-    `≈ ${fmtN(equivalents.google_searches)} Google searches | ` +
-    `${fmtN(equivalents.smartphone_charges)} phone charges | ` +
-    `${fmtN(equivalents.km_driven)} km driven | ` +
-    `${fmtN(equivalents.shower_seconds)} sec of shower`;
+  const comparison =
+    metrics.water_delta_percent >= 0
+      ? `${formatNumber(metrics.water_saved_display)} ${metrics.unit} lower (${formatNumber(metrics.water_delta_percent)}%)`
+      : `${formatNumber(Math.abs(metrics.water_delta_ml))} ml higher (${formatNumber(Math.abs(metrics.water_delta_percent))}%)`;
+  const tokenLabel =
+    metrics.token_source === "provider"
+      ? "provider-reported"
+      : "character-estimated";
+  const selectedScope =
+    metrics.water_scope === "direct"
+      ? "direct cooling only"
+      : "direct cooling plus electricity generation";
 
   const lines = [
-    `Water used:      ${fmtN(water_display)} ${unit}`,
-    `Without system:  ${fmtN(baseline_display)} ${unit}  (worst-case baseline)`,
-    `Water saved:     ${fmtN(water_saved_display)} ${unit}  (${water_sign}${water_abs}%)`,
-    `Energy:          ${fmtN(energyDisplayWh)} Wh`,
-    `Carbon (${region}): ${fmtG(co2_g)}  (baseline ${fmtG(baseline_co2_g)}, saved ${fmtG(co2_saved_g)} ${co2_sign}${co2_abs}%)`,
-    `Bottles saved:   ${fmtN(bottles_saved)} × ${bottleLabel}  |  session total: ${fmtN(bottles_saved_session)}`,
-    `In human terms: ${equivalentsLine}`,
-    ``,
-    sessionSentence,
+    `Model: ${metrics.model} | tokens: ${metrics.token_usage.prompt_tokens ?? 0} input + ${metrics.token_usage.completion_tokens ?? 0} output (${tokenLabel})`,
+    `Energy estimate: ${formatNumber(metrics.energy_wh)} Wh (modeled range ${formatNumber(metrics.energy_low_wh)} to ${formatNumber(metrics.energy_high_wh)} Wh)`,
+    `Water (${selectedScope}): ${formatNumber(metrics.water_display)} ${metrics.unit}`,
+    `  Direct cooling: ${formatNumber(metrics.direct_water_ml)} ml | electricity generation: ${formatNumber(metrics.electricity_water_ml)} ml`,
+    `Reference ${metrics.baseline_model}: ${formatNumber(metrics.baseline_display)} ${metrics.unit} | difference: ${comparison}`,
+    `Carbon (${metrics.region}): ${formatCarbon(metrics.co2_g)} | reference ${formatCarbon(metrics.baseline_co2_g)}`,
+    `Accounting: PUE ${formatNumber(metrics.pue)}, site WUE ${formatNumber(metrics.site_wue_l_per_kwh_it)} L/kWh-IT, electricity water ${formatNumber(metrics.electricity_water_l_per_kwh)} L/kWh`,
+    `Estimate status: ${metrics.estimation.confidence}; model multiplier ${formatNumber(metrics.estimation.model_energy_multiplier)}. This is an operational estimate, not facility telemetry.`,
+    `Session avoided water: ${formatNumber(metrics.bottles_saved_session)} × ${bottleLabel}.`,
   ];
-  if (cacheSavingsLine) lines.push(cacheSavingsLine);
-
+  if (cacheLine) lines.push(cacheLine);
   return lines.join("\n");
 }
 
 export function generateInlineFootnote(metrics: ResourceMetrics): string {
-  const {
-    water_display,
-    baseline_display,
-    water_saved_display,
-    water_saved_percent,
-    unit,
-    bottles_saved_session,
-    bottle_size_display,
-    cache_hit,
-    co2_g,
-    co2_saved_g,
-    co2_saved_percent,
-    equivalents,
-  } = metrics;
-
-  if (cache_hit) {
-    return (
-      `Cache hit — 0 ${unit}, 0 g CO₂e used ` +
-      `(baseline ${baseline_display.toFixed(4)} ${unit}). ` +
-      `Session: ${bottles_saved_session.toFixed(4)} bottles saved.`
-    );
+  if (metrics.cache_hit) {
+    return `Cache hit; inference skipped. Reference water avoided: ${metrics.baseline_display.toFixed(4)} ${metrics.unit}.`;
   }
 
-  const wSign = water_saved_percent >= 0 ? "−" : "+";
-  const cSign = co2_saved_percent >= 0 ? "−" : "+";
+  const direction = metrics.water_delta_percent >= 0 ? "lower" : "higher";
   return (
-    `Used ${water_display.toFixed(4)} ${unit} | Baseline ${baseline_display.toFixed(4)} ${unit} | ` +
-    `Saved ${water_saved_display.toFixed(4)} ${unit} (${wSign}${Math.abs(water_saved_percent).toFixed(1)}%) | ` +
-    `CO₂ ${co2_g.toFixed(4)} g (saved ${co2_saved_g.toFixed(4)} g, ${cSign}${Math.abs(co2_saved_percent).toFixed(1)}%) | ` +
-    `≈ ${equivalents.google_searches.toFixed(2)} Google searches | ` +
-    `Session: ${bottles_saved_session.toFixed(4)} × ${bottle_size_display.toFixed(1)} ${unit} bottles saved`
+    `${metrics.model}: ${metrics.energy_wh.toFixed(4)} Wh; ` +
+    `${metrics.water_display.toFixed(4)} ${metrics.unit} ${metrics.water_scope}; ` +
+    `${Math.abs(metrics.water_delta_percent).toFixed(1)}% ${direction} than ${metrics.baseline_model}; ` +
+    `${metrics.co2_g.toFixed(4)} g CO₂e; ${metrics.estimation.confidence}.`
   );
 }

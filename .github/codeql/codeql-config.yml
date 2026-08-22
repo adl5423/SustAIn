@@ -1,0 +1,6 @@
+name: SustAIn CodeQL configuration
+
+paths-ignore:
+  - "**/dist/**"
+  - "**/coverage/**"
+  - "groundhog-reports/**"

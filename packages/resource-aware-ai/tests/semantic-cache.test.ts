@@ -56,12 +56,27 @@ describe("SemanticCache", () => {
       output: text,
       footnote: "",
       metrics: {
+        model: "gpt-5.6-terra",
         energy_kwh: 0.001,
         energy_wh: 1,
+        energy_low_wh: 0.5,
+        energy_high_wh: 1.9,
+        baseline_energy_kwh: 0.00175,
+        baseline_model: "gpt-5.6-sol",
         water_ml: 2,
+        direct_water_ml: 0.1,
+        electricity_water_ml: 1.9,
+        water_low_ml: 1,
+        water_high_ml: 3.8,
+        water_scope: "direct+electricity",
+        pue: 1.4,
+        site_wue_l_per_kwh_it: 0.36,
+        electricity_water_l_per_kwh: 4.52,
         baseline_water_ml: 4.5,
         water_saved_ml: 2.5,
         water_saved_percent: 55.5,
+        water_delta_ml: 2.5,
+        water_delta_percent: 55.5,
         water_display: 2,
         baseline_display: 4.5,
         water_saved_display: 2.5,
@@ -85,6 +100,22 @@ describe("SemanticCache", () => {
           shower_seconds: 0,
         },
         tokens_estimated: 100,
+        token_usage: {
+          prompt_tokens: 25,
+          completion_tokens: 75,
+          total_tokens: 100,
+        },
+        token_source: "provider",
+        estimation: {
+          confidence: "measured-reference",
+          method: "provider-tokens",
+          basis: "test basis",
+          model_class: "medium",
+          model_energy_multiplier: 1,
+          reference_query_wh: 0.31,
+          reference_input_tokens: 100,
+          reference_output_tokens: 300,
+        },
         cache_hit: false,
         cache_hit_type: null,
         cache_similarity: null,
@@ -98,9 +129,28 @@ describe("SemanticCache", () => {
           water_saved_ml: 2.5,
           co2_saved_g: 0.419,
           bottles_saved: 0.005,
-          cache_savings: { requests: 0, exact_hits: 0, semantic_hits: 0, energy_wh: 0, water_ml: 0, co2_g: 0 },
-          equivalents_used: { google_searches: 0, smartphone_charges: 0, km_driven: 0, led_bulb_hours: 0, shower_seconds: 0 },
-          equivalents_saved: { google_searches: 0, smartphone_charges: 0, km_driven: 0, led_bulb_hours: 0, shower_seconds: 0 },
+          cache_savings: {
+            requests: 0,
+            exact_hits: 0,
+            semantic_hits: 0,
+            energy_wh: 0,
+            water_ml: 0,
+            co2_g: 0,
+          },
+          equivalents_used: {
+            google_searches: 0,
+            smartphone_charges: 0,
+            km_driven: 0,
+            led_bulb_hours: 0,
+            shower_seconds: 0,
+          },
+          equivalents_saved: {
+            google_searches: 0,
+            smartphone_charges: 0,
+            km_driven: 0,
+            led_bulb_hours: 0,
+            shower_seconds: 0,
+          },
         },
       },
     };
@@ -121,6 +171,37 @@ describe("SemanticCache", () => {
     const cache = new SemanticCache();
     cache.add([1, 0, 0], fakeResponse("only"));
     expect(cache.findSimilar([0, 1, 0], 0.5)).toBeNull();
+  });
+
+  it("does not return an entry from another scope", () => {
+    const cache = new SemanticCache();
+    cache.add(
+      [1, 0],
+      fakeResponse("tenant-a"),
+      "source",
+      "tenant-a:provider:model",
+    );
+    expect(
+      cache.findSimilar([1, 0], 0.9, "tenant-b:provider:model"),
+    ).toBeNull();
+    expect(
+      cache.findSimilar([1, 0], 0.9, "tenant-a:provider:model")?.response
+        .output,
+    ).toBe("tenant-a");
+  });
+
+  it("stores and returns copies so callers cannot mutate cached responses", () => {
+    const cache = new SemanticCache();
+    const original = fakeResponse("original");
+    cache.add([1, 0], original, "source", "scope");
+    original.output = "mutated before lookup";
+
+    const first = cache.findSimilar([1, 0], 0.9, "scope");
+    expect(first?.response.output).toBe("original");
+    if (first) first.response.output = "mutated after lookup";
+    expect(cache.findSimilar([1, 0], 0.9, "scope")?.response.output).toBe(
+      "original",
+    );
   });
 
   it("evicts FIFO once maxSize exceeded", () => {
@@ -147,7 +228,7 @@ describe("SemanticCache", () => {
   });
 });
 
-describe("SustainAI — semantic cache integration", () => {
+describe("SustainAI semantic cache integration", () => {
   function makeMock(text = "hello"): ProviderAdapter {
     return {
       async generate() {
@@ -166,7 +247,9 @@ describe("SustainAI — semantic cache integration", () => {
   }
 
   it("serves a similar prompt from the semantic cache (above threshold)", async () => {
-    const generateFn = vi.fn().mockResolvedValue({ text: "It is sunny.", usage: { total_tokens: 50 } });
+    const generateFn = vi
+      .fn()
+      .mockResolvedValue({ text: "It is sunny.", usage: { total_tokens: 50 } });
     const ai = new SustainAI({
       enableCache: true,
       enableSemanticCache: true,
@@ -196,16 +279,22 @@ describe("SustainAI — semantic cache integration", () => {
   });
 
   it("does NOT serve from semantic cache when below threshold", async () => {
-    const generateFn = vi.fn().mockResolvedValue({ text: "Hi", usage: { total_tokens: 30 } });
+    const generateFn = vi
+      .fn()
+      .mockResolvedValue({ text: "Hi", usage: { total_tokens: 30 } });
     const ai = new SustainAI({
       enableCache: true,
       enableSemanticCache: true,
       embedder: topicEmbedder,
-      semanticCacheThreshold: 0.99, // very strict
+      semanticCacheThreshold: 0.99, // Reject all but near-identical vectors.
     });
     ai.registerProvider("mock", { generate: generateFn });
 
-    await ai.chat({ model: "gpt-4o", provider: "mock", messages: [{ role: "user", content: "weather" }] });
+    await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "weather" }],
+    });
     const r2 = await ai.chat({
       model: "gpt-4o",
       provider: "mock",
@@ -224,11 +313,19 @@ describe("SustainAI — semantic cache integration", () => {
     });
     ai.registerProvider("mock", makeMock());
 
-    const a = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "weather please" }] };
-    const b = { model: "gpt-4o", provider: "mock", messages: [{ role: "user" as const, content: "forecast please" }] };
+    const a = {
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user" as const, content: "weather please" }],
+    };
+    const b = {
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user" as const, content: "forecast please" }],
+    };
 
-    await ai.chat(a);            // miss
-    await ai.chat(a);            // exact hit
+    await ai.chat(a); // miss
+    await ai.chat(a); // exact hit
     const r3 = await ai.chat(b); // semantic hit
 
     expect(r3.metrics.session.cache_savings.exact_hits).toBe(1);
@@ -236,8 +333,70 @@ describe("SustainAI — semantic cache integration", () => {
     expect(r3.metrics.session.cache_savings.requests).toBe(2);
   });
 
+  it("partitions exact and semantic cache entries by namespace", async () => {
+    const generateFn = vi
+      .fn()
+      .mockResolvedValueOnce({ text: "tenant A", usage: { total_tokens: 20 } })
+      .mockResolvedValueOnce({ text: "tenant B", usage: { total_tokens: 20 } });
+    const ai = new SustainAI({
+      enableCache: true,
+      enableSemanticCache: true,
+      embedder: topicEmbedder,
+      semanticCacheThreshold: 0.9,
+    });
+    ai.registerProvider("mock", { generate: generateFn });
+
+    const common = {
+      model: "gpt-5.6-terra",
+      provider: "mock",
+      messages: [{ role: "user" as const, content: "weather please" }],
+    };
+    const tenantA = await ai.chat({ ...common, cacheNamespace: "tenant-a" });
+    const tenantB = await ai.chat({ ...common, cacheNamespace: "tenant-b" });
+
+    expect(tenantA.output).toBe("tenant A");
+    expect(tenantB.output).toBe("tenant B");
+    expect(tenantB.metrics.cache_hit).toBe(false);
+    expect(generateFn).toHaveBeenCalledTimes(2);
+  });
+
+  it("partitions semantic cache entries by provider and model", async () => {
+    const providerA = vi
+      .fn()
+      .mockResolvedValue({ text: "provider A", usage: { total_tokens: 20 } });
+    const providerB = vi
+      .fn()
+      .mockResolvedValue({ text: "provider B", usage: { total_tokens: 20 } });
+    const ai = new SustainAI({
+      enableCache: false,
+      enableSemanticCache: true,
+      embedder: topicEmbedder,
+      semanticCacheThreshold: 0.9,
+    });
+    ai.registerProvider("provider-a", { generate: providerA });
+    ai.registerProvider("provider-b", { generate: providerB });
+
+    await ai.chat({
+      model: "gpt-5.6-terra",
+      provider: "provider-a",
+      messages: [{ role: "user", content: "weather" }],
+    });
+    const second = await ai.chat({
+      model: "gpt-5.6-terra",
+      provider: "provider-b",
+      messages: [{ role: "user", content: "forecast" }],
+    });
+
+    expect(second.output).toBe("provider B");
+    expect(second.metrics.cache_hit).toBe(false);
+    expect(providerA).toHaveBeenCalledOnce();
+    expect(providerB).toHaveBeenCalledOnce();
+  });
+
   it("survives an embedder that throws", async () => {
-    const generateFn = vi.fn().mockResolvedValue({ text: "ok", usage: { total_tokens: 10 } });
+    const generateFn = vi
+      .fn()
+      .mockResolvedValue({ text: "ok", usage: { total_tokens: 10 } });
     const ai = new SustainAI({
       enableCache: false,
       enableSemanticCache: true,
@@ -277,7 +436,11 @@ describe("SustainAI — semantic cache integration", () => {
       semanticCacheThreshold: 0.9,
     });
     ai.registerProvider("mock", makeMock());
-    await ai.chat({ model: "gpt-4o", provider: "mock", messages: [{ role: "user", content: "weather" }] });
+    await ai.chat({
+      model: "gpt-4o",
+      provider: "mock",
+      messages: [{ role: "user", content: "weather" }],
+    });
     expect(ai.getSemanticCacheSize()).toBe(1);
     ai.clearCache();
     expect(ai.getSemanticCacheSize()).toBe(0);

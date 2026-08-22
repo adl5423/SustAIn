@@ -23,9 +23,9 @@ const positional = rawArgs.filter((a) => a !== "--imperial");
 const [argModel, argProvider, ...rest] = positional;
 const prompt = rest.join(" ");
 
-const model    = argModel    || "gpt-4o-mini";
+const model = argModel || "gpt-4o-mini";
 const provider = argProvider || "openai";
-const message  = prompt      || "What is the water cycle? One sentence.";
+const message = prompt || "What is the water cycle? One sentence.";
 
 if (argModel === "--help" || argModel === "-h") {
   console.log(USAGE);
@@ -33,16 +33,18 @@ if (argModel === "--help" || argModel === "-h") {
 }
 
 const KEY_MAP: Record<string, string> = {
-  openai:    "OPENAI_API_KEY",
+  openai: "OPENAI_API_KEY",
   anthropic: "ANTHROPIC_API_KEY",
-  gemini:    "GEMINI_API_KEY",
-  mistral:   "MISTRAL_API_KEY",
-  cohere:    "COHERE_API_KEY",
+  gemini: "GEMINI_API_KEY",
+  mistral: "MISTRAL_API_KEY",
+  cohere: "COHERE_API_KEY",
 };
 
 const requiredKey = KEY_MAP[provider.toLowerCase()];
 if (requiredKey && !process.env[requiredKey]) {
-  console.error(`Missing ${requiredKey} — add it to Replit Secrets.`);
+  console.error(
+    `Missing ${requiredKey}. Add it to the server-side secret store.`,
+  );
   process.exit(1);
 }
 
@@ -52,7 +54,9 @@ if (requiredKey && !process.env[requiredKey]) {
   console.log(`Units:    ${imperial ? "imperial (fl oz)" : "metric (ml)"}`);
   console.log(`Prompt:   "${message}"\n`);
 
-  const ai = new ResourceAwareAI({ unitSystem: imperial ? "imperial" : "metric" });
+  const ai = new ResourceAwareAI({
+    unitSystem: imperial ? "imperial" : "metric",
+  });
 
   const res = await ai.chat({
     model,

@@ -1,0 +1,4 @@
+title = "SustAIn secret-scanning configuration"
+
+[extend]
+useDefault = true

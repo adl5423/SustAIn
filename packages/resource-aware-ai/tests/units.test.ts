@@ -75,4 +75,10 @@ describe("makeUnitContext", () => {
     expect(ctx.bottleSizeMl).toBe(250);
     expect(ctx.bottleSizeDisplay).toBe(250);
   });
+
+  it("rejects invalid unit and bottle configuration", () => {
+    expect(() => makeUnitContext("unknown" as never)).toThrow(/unitSystem/);
+    expect(() => makeUnitContext("metric", 0)).toThrow(/bottleSizeMl/);
+    expect(() => makeUnitContext("metric", Number.NaN)).toThrow(/bottleSizeMl/);
+  });
 });

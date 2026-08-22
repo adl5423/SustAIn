@@ -10,7 +10,7 @@ function provider(text: string): ProviderAdapter {
   };
 }
 
-describe("Router — mixed-length tier ladders across calls", () => {
+describe("Router with mixed-length tier ladders across calls", () => {
   it("grows tier_usage when a later call uses a longer ladder", async () => {
     const ai = new SustainAI({ enableCache: false });
     ai.registerProvider("a", provider("Confident answer one."));
@@ -43,7 +43,7 @@ describe("Router — mixed-length tier ladders across calls", () => {
     const stats = ai.getStats();
     expect(stats.router?.routed_requests).toBe(2);
     expect(stats.router?.tier_usage[0]).toBe(2);
-    // The array grew safely — no out-of-bounds errors
+    // The array grows without an out-of-bounds access.
     expect(stats.router?.tier_usage.length).toBeGreaterThanOrEqual(1);
   });
 
@@ -52,7 +52,7 @@ describe("Router — mixed-length tier ladders across calls", () => {
     ai.registerProvider("a", provider("anything"));
     ai.registerProvider("b", provider("anything"));
 
-    // Returns NaN — should be treated as 0 (forces escalation)
+    // A NaN score is treated as 0 and forces escalation.
     const res = await ai.chatWithRouting({
       messages: [{ role: "user", content: "x" }],
       router: {

@@ -1,0 +1,54 @@
+{
+  "accepted_risks": [],
+  "generated_at": "2026-08-22T04:50:47.758572+00:00",
+  "notes": [
+    {
+      "created_at": "2026-08-22T04:50:47.758574+00:00",
+      "mode": "snapshot",
+      "reason": "False positive after remediation: this React client adapter has no server route; customFetch rejects any destination outside the configured base, browser origin, or explicit exact-origin allowlists before fetch, rejects redirects, and custom-fetch.test.ts covers metadata, loopback, RFC1918, untrusted credential, and allowed-host cases."
+    }
+  ],
+  "repo": "sustAIn",
+  "schema_version": "groundhog.baseline.v1",
+  "snapshot_scan_filter": {
+    "excluded_ignored_files": 12,
+    "excluded_local_files": 0,
+    "excluded_out_of_scope_files": 0,
+    "excluded_symlink_dirs": 0,
+    "excluded_symlink_files": 0,
+    "excluded_test_dirs": 1,
+    "excluded_test_files": 2,
+    "include_ignored": false,
+    "include_local": false,
+    "include_tests": false,
+    "mode": "production-default"
+  },
+  "snapshot_summary": {
+    "by_rule": {
+      "GH-SSRF-001": 1
+    },
+    "by_severity": {
+      "critical": 0,
+      "high": 1,
+      "info": 0,
+      "low": 0,
+      "medium": 0
+    },
+    "total": 1
+  },
+  "suppressions": [
+    {
+      "confidence": "medium",
+      "created_at": "2026-08-22T04:50:48.371112+00:00",
+      "expires_at": "2027-02-21T00:00:00Z",
+      "file": "lib/api-client-react/src/custom-fetch.ts",
+      "id": "gh-ssrf-001-e53bfb7bdfc4",
+      "line": 527,
+      "reason": "False positive after remediation: this React client adapter has no server route; customFetch rejects any destination outside the configured base, browser origin, or explicit exact-origin allowlists before fetch, rejects redirects, and custom-fetch.test.ts covers metadata, loopback, RFC1918, untrusted credential, and allowed-host cases.",
+      "rule_id": "GH-SSRF-001",
+      "severity": "high",
+      "status": "suppressed",
+      "title": "Possible SSRF through user-controlled outbound request"
+    }
+  ]
+}

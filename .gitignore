@@ -22,8 +22,18 @@ testem.log
 
 # Environment files
 .env
-.env.local
-.env.*.local
+.env.*
+!.env.example
+
+# Local credentials and private key material
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+credentials.json
+service-account*.json
+.npmrc.local
 
 # IDE and editor settings
 /.idea
@@ -63,3 +73,10 @@ desktop.ini
 .replitignore
 replit.md
 attached_assets/
+
+# Local security-scan evidence may contain source excerpts and machine paths.
+groundhog-reports/
+.groundhog-cache/
+.groundhog/*
+!.groundhog/baseline.json
+.pnpm-store/

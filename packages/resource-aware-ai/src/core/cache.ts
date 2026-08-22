@@ -4,17 +4,28 @@ import { createHash } from "node:crypto";
 export class ResponseCache {
   private readonly store = new Map<string, ChatResponse>();
 
-  hash(model: string, messages: Message[], provider?: string): string {
-    const payload = JSON.stringify({ provider: provider ?? "", model, messages });
+  hash(
+    model: string,
+    messages: Message[],
+    provider?: string,
+    namespace?: string,
+  ): string {
+    const payload = JSON.stringify({
+      namespace: namespace ?? "",
+      provider: provider ?? "",
+      model,
+      messages,
+    });
     return createHash("sha256").update(payload).digest("hex");
   }
 
   get(key: string): ChatResponse | undefined {
-    return this.store.get(key);
+    const value = this.store.get(key);
+    return value ? structuredClone(value) : undefined;
   }
 
   set(key: string, value: ChatResponse): void {
-    this.store.set(key, value);
+    this.store.set(key, structuredClone(value));
   }
 
   has(key: string): boolean {

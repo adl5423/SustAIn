@@ -11,14 +11,17 @@ export function calculateCarbon(kwh: number, gridGperKwh: number): number {
   return kwh * gridGperKwh;
 }
 
-export function calculateBaselineCarbon(kwh: number, baselineGridGperKwh: number): number {
+export function calculateBaselineCarbon(
+  kwh: number,
+  baselineGridGperKwh: number,
+): number {
   return kwh * baselineGridGperKwh;
 }
 
 export function computeCarbonMetrics(
   kwh: number,
   gridGperKwh: number,
-  baselineGridGperKwh: number
+  baselineGridGperKwh: number,
 ): CarbonResult {
   const co2_g = calculateCarbon(kwh, gridGperKwh);
   const baseline_co2_g = calculateBaselineCarbon(kwh, baselineGridGperKwh);

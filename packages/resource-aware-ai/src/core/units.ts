@@ -30,13 +30,26 @@ export interface UnitContext {
   bottleSizeDisplay: number;
 }
 
-export function makeUnitContext(system: UnitSystem, bottleSizeMl?: number): UnitContext {
+export function makeUnitContext(
+  system: UnitSystem,
+  bottleSizeMl?: number,
+): UnitContext {
+  if (system !== "metric" && system !== "imperial") {
+    throw new TypeError('unitSystem must be "metric" or "imperial".');
+  }
   const resolvedBottleMl = bottleSizeMl ?? DEFAULT_BOTTLE_ML;
+  if (!Number.isFinite(resolvedBottleMl) || resolvedBottleMl <= 0) {
+    throw new TypeError(
+      "bottleSizeMl must be a finite number greater than zero.",
+    );
+  }
   return {
     system,
     unit: getUnit(system),
     bottleSizeMl: resolvedBottleMl,
     bottleSizeDisplay:
-      system === "imperial" ? resolvedBottleMl * FL_OZ_PER_ML : resolvedBottleMl,
+      system === "imperial"
+        ? resolvedBottleMl * FL_OZ_PER_ML
+        : resolvedBottleMl,
   };
 }

@@ -27,6 +27,12 @@ export interface ChatOptions {
   messages: Message[];
   mode?: Mode;
   constraints?: Constraints;
+  /** Expected visible output used only for the pre-call resource guard. */
+  expectedOutputTokens?: number;
+  /** Model used for the like-for-like savings comparison. */
+  baselineModel?: string;
+  /** Stable tenant or user partition for exact and semantic cache entries. */
+  cacheNamespace?: string;
 }
 
 export interface RoutedChatOptions {
@@ -34,6 +40,8 @@ export interface RoutedChatOptions {
   router: RouterOptions;
   mode?: Mode;
   constraints?: Constraints;
+  /** Stable tenant or user partition for every tier's cache entries. */
+  cacheNamespace?: string;
 }
 
 export interface CacheSavingsTotals {
@@ -42,7 +50,7 @@ export interface CacheSavingsTotals {
   /**
    * Subset of `requests`: hits served by the exact-match cache.
    *
-   * Optional for backward compatibility — older consumers that hand-built
+   * Optional for compatibility with consumers that hand-built
    * a `CacheSavingsTotals` literal won't break on upgrade. The SDK always
    * populates this field.
    */
@@ -75,15 +83,32 @@ export interface SessionSummary {
 }
 
 export interface ResourceMetrics {
+  model: string;
   // ── Energy ─────────────────────────────────────────────────────────────────
   energy_kwh: number;
   energy_wh: number;
+  energy_low_wh: number;
+  energy_high_wh: number;
+  baseline_energy_kwh: number;
+  baseline_model: string;
 
   // ── Water ──────────────────────────────────────────────────────────────────
+  /** Selected operational-water scope; see water_scope. */
   water_ml: number;
+  direct_water_ml: number;
+  electricity_water_ml: number;
+  water_low_ml: number;
+  water_high_ml: number;
+  water_scope: WaterScope;
+  pue: number;
+  site_wue_l_per_kwh_it: number;
+  electricity_water_l_per_kwh: number;
   baseline_water_ml: number;
   water_saved_ml: number;
   water_saved_percent: number;
+  /** Positive means savings; negative means an increase relative to baseline. */
+  water_delta_ml: number;
+  water_delta_percent: number;
 
   water_display: number;
   baseline_display: number;
@@ -109,6 +134,9 @@ export interface ResourceMetrics {
 
   // ── Tokens & cache ─────────────────────────────────────────────────────────
   tokens_estimated: number;
+  token_usage: TokenUsage;
+  token_source: TokenSource;
+  estimation: EstimationDetails;
   cache_hit: boolean;
   /**
    * "exact" | "semantic" when cache_hit is true; null otherwise.
@@ -117,7 +145,7 @@ export interface ResourceMetrics {
    */
   cache_hit_type?: "exact" | "semantic" | null;
   /**
-   * Cosine similarity for semantic hits (0–1); null otherwise. Optional
+   * Cosine similarity for semantic hits (0 to 1); null otherwise. Optional
    * for the same backward-compat reason as `cache_hit_type`.
    */
   cache_similarity?: number | null;
@@ -137,31 +165,78 @@ export interface ChatResponse {
 
 export interface ProviderResponse {
   text: string;
-  usage?: {
-    prompt_tokens?: number;
-    completion_tokens?: number;
-    total_tokens?: number;
-  };
+  usage?: TokenUsage;
 }
 
 export interface ProviderAdapter {
-  generate(options: { model: string; messages: Message[] }): Promise<ProviderResponse>;
+  generate(options: {
+    model: string;
+    messages: Message[];
+  }): Promise<ProviderResponse>;
 }
 
 export type EstimatorFn = (tokens: number, model: string) => number;
+
+export type TokenSource = "provider" | "estimated" | "cache";
+export type WaterScope = "direct" | "direct+electricity";
+export type EstimateConfidence = "measured-reference" | "modeled" | "custom";
+
+export interface TokenUsage {
+  /** Provider-native input token count. */
+  prompt_tokens?: number;
+  /** Provider-native visible and reasoning output token count. */
+  completion_tokens?: number;
+  total_tokens?: number;
+  cached_input_tokens?: number;
+  reasoning_tokens?: number;
+}
+
+export interface WaterAccountingConfig {
+  /** Facility power divided by IT power. U.S. 2023 average: 1.4. */
+  pue: number;
+  /** Liters of on-site water consumed per kWh of IT electricity. */
+  siteWueLitersPerKwhIt: number;
+  /** Liters consumed to generate each kWh delivered to the facility. */
+  electricityWaterLitersPerKwh: number;
+  /** Whether water_ml includes direct cooling only or both operational scopes. */
+  scope: WaterScope;
+}
+
+export interface EstimationDetails {
+  confidence: EstimateConfidence;
+  method:
+    | "provider-tokens"
+    | "character-approximation"
+    | "custom-estimator"
+    | "cache";
+  basis: string;
+  model_class: ModelProfile["class"];
+  model_energy_multiplier: number;
+  reference_query_wh: number;
+  reference_input_tokens: number;
+  reference_output_tokens: number;
+}
 
 /**
  * Embedder function: turns a string into a fixed-length numeric vector.
  *
  * The SDK does not ship with a default embedder so it stays dependency-free.
- * Plug in any embedder you like — OpenAI's `text-embedding-3-small`, a local
+ * Use OpenAI's `text-embedding-3-small`, a local
  * MiniLM via `@xenova/transformers`, or your own.
  */
 export type EmbedderFn = (text: string) => number[] | Promise<number[]>;
 
 export interface SustainAIConfig {
+  /**
+   * @deprecated Use waterAccounting. This legacy value treats all water as
+   * one undifferentiated ml/kWh factor.
+   */
   regionFactor?: number;
+  /** @deprecated Use baselineModel or baselineEnergyMultiplier. */
   baselineFactor?: number;
+  waterAccounting?: Partial<WaterAccountingConfig>;
+  baselineModel?: string;
+  baselineEnergyMultiplier?: number;
   enableCache?: boolean;
   customEstimator?: EstimatorFn;
   unitSystem?: UnitSystem;
@@ -222,10 +297,7 @@ export interface ConfigError {
 }
 
 export type SDKError =
-  | ResourceLimitError
-  | ProviderError
-  | UnknownProviderError
-  | ConfigError;
+  ResourceLimitError | ProviderError | UnknownProviderError | ConfigError;
 
 export class SustainAIError extends Error {
   public readonly sdkError: SDKError;
@@ -248,5 +320,12 @@ export interface ModelProfile {
   provider: string;
   class: "small" | "medium" | "large";
   parametersBillions?: number;
+  activeParametersBillions?: number;
   contextWindow?: number;
+  maxOutputTokens?: number;
+  energyMultiplier?: number;
+  deployment?: "hosted" | "open-weight" | "local";
+  status?: "current" | "preview" | "legacy";
+  verifiedAsOf?: string;
+  sourceUrl?: string;
 }

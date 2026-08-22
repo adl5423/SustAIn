@@ -1,28 +1,42 @@
 import type { Message, ProviderResponse } from "../types.js";
 import { BaseProvider } from "./base.js";
+import { validateEndpoint } from "./http.js";
+import type { EndpointPolicy } from "./http.js";
 
-export interface MistralProviderConfig {
+export interface MistralProviderConfig extends EndpointPolicy {
   apiKey?: string;
   serverURL?: string;
 }
 
 export class MistralProvider extends BaseProvider {
-  private config: MistralProviderConfig;
+  private readonly config: MistralProviderConfig;
 
   constructor(config: MistralProviderConfig = {}) {
     super();
-    this.config = config;
+    if (config.serverURL) validateEndpoint(config.serverURL, config);
+    this.config = { ...config };
   }
 
-  async generate({ model, messages }: { model: string; messages: Message[] }): Promise<ProviderResponse> {
+  async generate({
+    model,
+    messages,
+  }: {
+    model: string;
+    messages: Message[];
+  }): Promise<ProviderResponse> {
     const apiKey = this.config.apiKey ?? process.env["MISTRAL_API_KEY"];
-    if (!apiKey) throw new Error("Mistral API key required. Set MISTRAL_API_KEY or pass apiKey in config.");
+    if (!apiKey)
+      throw new Error(
+        "Mistral API key required. Set MISTRAL_API_KEY or pass apiKey in config.",
+      );
 
     let Mistral: typeof import("@mistralai/mistralai").Mistral;
     try {
       ({ Mistral } = await import("@mistralai/mistralai"));
     } catch {
-      throw new Error('Mistral SDK not installed. Run: npm install @mistralai/mistralai');
+      throw new Error(
+        "Mistral SDK not installed. Run: pnpm add @mistralai/mistralai",
+      );
     }
 
     const client = new Mistral({ apiKey, serverURL: this.config.serverURL });
@@ -34,7 +48,10 @@ export class MistralProvider extends BaseProvider {
 
     const choice = res.choices?.[0];
     const content = choice?.message?.content;
-    const text = typeof content === "string" ? content : (content?.[0] as { text?: string } | undefined)?.text ?? "";
+    const text =
+      typeof content === "string"
+        ? content
+        : ((content?.[0] as { text?: string } | undefined)?.text ?? "");
 
     return {
       text,

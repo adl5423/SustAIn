@@ -1,0 +1,9 @@
+* @adl5423
+
+/.github/ @adl5423
+/SECURITY.md @adl5423
+/packages/resource-aware-ai/src/providers/ @adl5423
+/packages/resource-aware-ai/src/core/estimator.ts @adl5423
+/packages/resource-aware-ai/src/core/calculator.ts @adl5423
+/pnpm-lock.yaml @adl5423
+/pnpm-workspace.yaml @adl5423

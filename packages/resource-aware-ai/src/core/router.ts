@@ -44,9 +44,9 @@ export interface RouterOptions {
 export interface RouterMetrics {
   /** 0-based index of the tier whose response was returned to the caller. */
   tier_used: number;
-  /** Total tiers actually executed (>= tier_used + 1). */
+  /** Number of tiers invoked (>= tier_used + 1). */
   tiers_attempted: number;
-  /** Confidence score (0–1) of the returned tier's response. */
+  /** Confidence score from 0 to 1 for the returned tier's response. */
   confidence: number;
   /** True when at least one escalation occurred (i.e. `tier_used > 0`). */
   escalated: boolean;
@@ -56,10 +56,9 @@ export interface RouterMetrics {
   provider_chosen: string;
   /**
    * Energy this routed call would have used if it had gone straight to the
-   * largest (last) tier with the same response token count, minus what we
-   * actually spent across the attempted tiers. Positive = router saved
-   * energy. Negative = escalation cost more than going large directly
-   * (rare; happens when tier 0 was unhelpful AND its tokens were nontrivial).
+   * largest (last) tier with the same response token count, minus the energy
+   * spent across attempted tiers. A positive value records savings. A negative
+   * value records escalation overhead.
    */
   energy_saved_vs_largest_kwh: number;
   /** Same idea, in ml of water. */
@@ -73,7 +72,7 @@ export interface RouterSessionTotals {
   routed_requests: number;
   /** Of those, how many escalated past tier 0 at least once. */
   escalations: number;
-  /** Per-tier counts of which tier ultimately answered, indexed by tier number. */
+  /** Selected-response counts indexed by tier number. */
   tier_usage: number[];
   /** Cumulative router savings vs always going to the largest tier. */
   energy_saved_vs_largest_kwh: number;
@@ -82,9 +81,8 @@ export interface RouterSessionTotals {
 }
 
 /**
- * Phrases that strongly suggest the model isn't actually answering the
- * question — it's deflecting, hedging, or refusing. Each match docks
- * confidence by `LOW_CONFIDENCE_PENALTY`.
+ * Phrases that indicate a deflection, hedge, or refusal instead of an answer.
+ * Each match reduces confidence by `LOW_CONFIDENCE_PENALTY`.
  */
 export const LOW_CONFIDENCE_PATTERNS: RegExp[] = [
   /\bi (?:don'?t|do not) know\b/i,
@@ -99,7 +97,7 @@ export const LOW_CONFIDENCE_PATTERNS: RegExp[] = [
   /\bit (?:depends|varies)\b/i,
 ];
 
-/** Outright refusal phrasing — penalised more heavily. */
+/** Outright refusal phrasing receives a larger penalty. */
 export const REFUSAL_PATTERNS: RegExp[] = [
   /\bI (?:can'?t|cannot|won'?t) (?:assist|help|provide|do that)\b/i,
   /\bI'?m sorry,? but I (?:can'?t|cannot)\b/i,
@@ -116,7 +114,7 @@ export const QUESTION_BACK_LENGTH_LIMIT = 200;
 /**
  * Heuristic confidence scorer used when no `confidenceFn` is provided.
  *
- * Scoring (each rule independently subtracts from a starting score of 1.0):
+ * Scoring rules subtract from a starting score of 1.0:
  *   • response shorter than 20 chars  → −0.30
  *   • each LOW_CONFIDENCE_PATTERN hit → −0.25
  *   • each REFUSAL_PATTERN hit        → −0.40
@@ -130,7 +128,8 @@ export function defaultConfidenceFn(response: ProviderResponse): number {
   if (text.length === 0) return 0;
 
   let confidence = 1.0;
-  if (text.length < SHORT_RESPONSE_THRESHOLD) confidence -= SHORT_RESPONSE_PENALTY;
+  if (text.length < SHORT_RESPONSE_THRESHOLD)
+    confidence -= SHORT_RESPONSE_PENALTY;
   for (const re of LOW_CONFIDENCE_PATTERNS) {
     if (re.test(text)) confidence -= LOW_CONFIDENCE_PENALTY;
   }
