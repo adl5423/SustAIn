@@ -93,7 +93,7 @@
     "cohere-ai": "^8.0.1",
     "openai": "^7.5.0",
     "tsx": "catalog:",
-    "typescript": "~5.9.3",
+    "typescript": "~7.0.2",
     "vitest": "^4.1.11"
   },
   "publishConfig": {
