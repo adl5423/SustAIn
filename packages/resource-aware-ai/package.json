@@ -86,9 +86,9 @@
     }
   },
   "devDependencies": {
-    "@anthropic-ai/sdk": "^0.120.0",
+    "@anthropic-ai/sdk": "^0.125.0",
     "@google/genai": "^2.18.0",
-    "@mistralai/mistralai": "2.6.3",
+    "@mistralai/mistralai": "2.7.0",
     "@types/node": "catalog:",
     "cohere-ai": "^8.0.1",
     "openai": "^7.5.0",
